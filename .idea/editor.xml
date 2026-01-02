@@ -92,6 +92,11 @@
     <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/WRAP_BEFORE_INVOCATION_RPAR/@EntryValue" value="false" type="bool" />
     <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/WRAP_BEFORE_TERNARY_OPSIGNS/@EntryValue" value="true" type="bool" />
     <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/WRAP_PARAMETERS_STYLE/@EntryValue" value="WRAP_IF_LONG" type="string" />
+    <option name="/Default/CodeStyle/CppSortIncludes/IncludeSortCategories/@EntryValue" value="&lt;CppIncludeCategories&gt;&#10;  &lt;CppIncludeCategorySetting Pattern=&quot;^&amp;quot;.*&quot; Description=&quot;#include &amp;quot;header&amp;quot;&quot; Group=&quot;1&quot; Order=&quot;2&quot; /&gt;&#10;  &lt;CppIncludeCategorySetting Pattern=&quot;^&amp;lt;.*&quot; Description=&quot;#include &amp;lt;header&amp;gt;&quot; Group=&quot;2&quot; Order=&quot;3&quot; /&gt;&#10;&lt;/CppIncludeCategories&gt;" type="string" />
+    <option name="/Default/CodeStyle/CppSortIncludes/MainHeaderGroup/@EntryValue" value="0" type="long" />
+    <option name="/Default/CodeStyle/CppSortIncludes/UnmatchedHeaderGroup/@EntryValue" value="3" type="long" />
     <option name="/Default/CodeStyle/EditorConfig/EnableClangFormatSupport/@EntryValue" value="false" type="bool" />
+    <option name="/Default/CodeStyle/Generate/=CppDefinitions/@KeyIndexDefined" value="true" type="bool" />
+    <option name="/Default/CodeStyle/Generate/=CppDefinitions/Options/=GenerateInlineDefinitions/@EntryIndexedValue" value="False" type="string" />
   </component>
 </project>
