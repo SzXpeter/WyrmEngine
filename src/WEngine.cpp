@@ -18,12 +18,6 @@ const std::vector<const char*> validationLayers = {
 };
 #endif
 
-static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void*) {
-    std::cerr << to_string(severity) << " validation layer: type " << to_string(type) << " msg: " << pCallbackData->pMessage << std::endl;
-
-    return vk::False;
-}
-
 void WEngine::Run()
 {
     init_window();
@@ -65,6 +59,8 @@ vk::raii::Instance createVulkanInstance(const vk::raii::Context& context);
 void WEngine::init_vulkan()
 {
     instance = createVulkanInstance(context);
+    setup_debug_messenger();
+    pick_physical_device();
 }
 
 std::vector<const char*> getRequiredLayers(const vk::raii::Context& context);
@@ -89,7 +85,7 @@ vk::raii::Instance createVulkanInstance(const vk::raii::Context& context)
         .enabledExtensionCount = static_cast<uint32_t>(requiredExtensions.size()),
         .ppEnabledExtensionNames = requiredExtensions.data()
     };
-    return vk::raii::Instance(context, createInfo);
+    return {context, createInfo};
 }
 
 std::vector<const char*> getRequiredExtensions(const vk::raii::Context& context)
@@ -162,6 +158,83 @@ void WEngine::setup_debug_messenger()
     debug_messenger = instance.createDebugUtilsMessengerEXT(createInfo);
 }
 
+void WEngine::pick_physical_device()
+{
+    auto physicalDevices = instance.enumeratePhysicalDevices();
+
+    const auto device_it = std::ranges::find_if(physicalDevices,
+        [&](const auto& physicalDevice) {
+            auto queueFamilies = physicalDevice.getQueueFamilyProperties();
+            bool isSuitable = physicalDevice.getProperties().apiVersion >= VK_API_VERSION_1_3;
+
+            const auto queueFamilyProperty_it = std::ranges::find_if(queueFamilies,
+                [](const auto& qfp) {
+                    return (qfp.queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0);
+            });
+            isSuitable = isSuitable && (queueFamilyProperty_it != queueFamilies.end());
+
+            auto extensions = physicalDevice.enumerateDeviceExtensionProperties();
+            bool found = true;
+            for (const auto& dExtension : deviceExtensions)
+            {
+                auto extension_it = std::ranges::find_if(extensions, [dExtension](const auto& ext){return strcmp(ext.extensionName, dExtension) == 0; });
+                found = found && (extension_it != extensions.end());
+            }
+            isSuitable = isSuitable && found;
+
+            if (isSuitable)
+                physical_device = physical_device;
+
+            return isSuitable;
+    });
+
+    if (device_it == physicalDevices.end())
+        throw std::runtime_error("failed to find a suitable GPU");
+}
+
+uint32_t findQueueFamilies(const vk::raii::PhysicalDevice& physicalDevice, vk::QueueFlagBits requestedProperty);
+void WEngine::create_logical_device()
+{
+    auto graphicsIndex = findQueueFamilies(physical_device, vk::QueueFlagBits::eGraphics);
+
+    float queuePriority = .5f;
+    vk::DeviceQueueCreateInfo queueCreateInfo {
+        .queueFamilyIndex = graphicsIndex,
+        .queueCount = 1,
+        .pQueuePriorities = &queuePriority
+    };
+
+    vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> featureChain (
+        {},
+        {.dynamicRendering = true},
+        {.extendedDynamicState = true}
+    );
+
+    vk::DeviceCreateInfo deviceCreateInfo {
+        .pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>(),
+        .queueCreateInfoCount = 1,
+        .pQueueCreateInfos = &queueCreateInfo,
+        .enabledExtensionCount =  static_cast<uint32_t>(deviceExtensions.size()),
+        .ppEnabledExtensionNames = deviceExtensions.data()
+    };
+
+    device = vk::raii::Device(physical_device, deviceCreateInfo);
+
+    graphics_queue = vk::raii::Queue(device, graphicsIndex, 0);
+}
+
+uint32_t findQueueFamilies(const vk::raii::PhysicalDevice& physicalDevice, vk::QueueFlagBits requestedProperty)
+{
+    auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
+
+    auto requestedQueueFamilyProperty = std::ranges::find_if(queueFamilyProperties,
+        [requestedProperty](const auto& qfp) {
+            return (qfp.queueFlags & requestedProperty) != static_cast<vk::QueueFlags>(0);
+        });
+
+    return std::ranges::distance(queueFamilyProperties.begin(), requestedQueueFamilyProperty);
+}
+
 void WEngine::main_loop()
 {
     while (!glfwWindowShouldClose(window))
@@ -175,4 +248,12 @@ void WEngine::cleanup()
     glfwDestroyWindow(window);
 
     glfwTerminate();
+}
+
+vk::Bool32 WEngine::debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
+    vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT *pCallbackData, void *)
+{
+    std::cerr << to_string(severity) << " validation layer: type " << to_string(type) << " msg: " << pCallbackData->pMessage << std::endl;
+
+    return vk::False;
 }
