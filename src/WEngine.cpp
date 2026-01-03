@@ -183,7 +183,7 @@ void WEngine::pick_physical_device()
             isSuitable = isSuitable && found;
 
             if (isSuitable)
-                physical_device = physical_device;
+                physical_device = physicalDevice;
 
             return isSuitable;
     });
