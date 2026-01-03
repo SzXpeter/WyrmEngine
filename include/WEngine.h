@@ -24,10 +24,14 @@ private:
     std::pair<uint32_t, uint32_t> window_size;
     GLFWwindow* window = nullptr;
 
+    vk::raii::Context context;
+    vk::raii::Instance instance = nullptr;
+    vk::raii::DebugUtilsMessengerEXT debug_messenger = nullptr;
 
     void init_window();
 
     void init_vulkan();
+    void setup_debug_messenger();
 
     void main_loop();
     void cleanup();

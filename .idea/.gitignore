@@ -5,6 +5,7 @@ cmake-build-*/
 /shelf/
 /workspace.xml
 /usage.statistics.xml
+/editor.xml
 
 # Ignored default folder with query files
 /queries/
