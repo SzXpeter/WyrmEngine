@@ -309,7 +309,7 @@ void WEngine::create_swap_chain()
     swapChainCreateInfo.minImageCount = chooseSwapMinImageCount(swapSurfaceCapabilities);
     swapChainCreateInfo.imageFormat = swap_chain_image_format = swapSurfaceFormat.format;
     swapChainCreateInfo.imageColorSpace = swapSurfaceFormat.colorSpace;
-    swapChainCreateInfo.imageExtent = swap_chain_extent;
+    swapChainCreateInfo.imageExtent = swap_chain_extent = chooseSwapExtent(swapSurfaceCapabilities, window);
     swapChainCreateInfo.imageArrayLayers = 1;
     swapChainCreateInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
     swapChainCreateInfo.imageSharingMode = vk::SharingMode::eExclusive;
@@ -320,7 +320,6 @@ void WEngine::create_swap_chain()
     swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
 
     swap_chain = logical_device.createSwapchainKHR(swapChainCreateInfo);
-    swap_chain_extent = chooseSwapExtent(swapSurfaceCapabilities, window);
     swap_chain_images = swap_chain.getImages();
 }
 
@@ -355,7 +354,7 @@ uint32_t chooseSwapMinImageCount(const vk::SurfaceCapabilitiesKHR& swapSurfaceCa
     return minImageCount;
 }
 
-vk::PresentModeKHR choosePresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)
+vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)
 {
     for (const auto& availablePresentMode : availablePresentModes)
         if (availablePresentMode == vk::PresentModeKHR::eMailbox)
@@ -378,6 +377,10 @@ void WEngine::create_image_views()
         imageViewCreateInfo.image = image;
         swap_chain_image_views.emplace_back(logical_device, imageViewCreateInfo);
     }
+}
+
+void WEngine::create_graphics_pipeline()
+{
 }
 
 void WEngine::main_loop()

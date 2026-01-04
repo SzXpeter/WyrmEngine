@@ -52,6 +52,7 @@ private:
     void create_logical_device();
     void create_swap_chain();
     void create_image_views();
+    void create_graphics_pipeline();
 
     void main_loop();
     void cleanup();
