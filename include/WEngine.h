@@ -51,7 +51,7 @@ private:
     void pick_physical_device();
     void create_logical_device();
     void create_swap_chain();
-    void create_swap_chain_views();
+    void create_image_views();
 
     void main_loop();
     void cleanup();

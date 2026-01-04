@@ -58,6 +58,8 @@ void WEngine::init_vulkan()
     create_surface();
     pick_physical_device();
     create_logical_device();
+    create_swap_chain();
+    create_image_views();
 }
 
 std::vector<const char*> getRequiredLayers(const vk::raii::Context& context);
@@ -292,29 +294,20 @@ uint32_t getPresentationQFPIndex(const vk::raii::PhysicalDevice& physicalDevice,
     return presentationIndex;
 }
 
-vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities, GLFWwindow* window);
 vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
+vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities, GLFWwindow* window);
+uint32_t chooseSwapMinImageCount(const vk::SurfaceCapabilitiesKHR& swapSurfaceCapabilities);
 vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
 void WEngine::create_swap_chain()
 {
     auto swapSurfaceCapabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
     auto swapSurfaceFormat = chooseSwapSurfaceFormat(physical_device.getSurfaceFormatsKHR(surface));
 
-    swap_chain_image_format = swapSurfaceFormat.format;
-    swap_chain_extent = chooseSwapExtent(swapSurfaceCapabilities, window);
-
-    auto minImageCount = std::max(3u, swapSurfaceCapabilities.minImageCount);
-    minImageCount = (swapSurfaceCapabilities.maxImageCount > 0 && minImageCount > swapSurfaceCapabilities.maxImageCount) ? swapSurfaceCapabilities.maxImageCount : minImageCount;
-
-    uint32_t imageCount = swapSurfaceCapabilities.minImageCount + 1;
-    if (swapSurfaceCapabilities.maxImageCount > 0 && imageCount > swapSurfaceCapabilities.maxImageCount)
-        imageCount = swapSurfaceCapabilities.maxImageCount;
-
     vk::SwapchainCreateInfoKHR swapChainCreateInfo {};
     swapChainCreateInfo.flags = vk::SwapchainCreateFlagsKHR{};
     swapChainCreateInfo.surface = surface;
-    swapChainCreateInfo.minImageCount = minImageCount;
-    swapChainCreateInfo.imageFormat = swap_chain_image_format;
+    swapChainCreateInfo.minImageCount = chooseSwapMinImageCount(swapSurfaceCapabilities);
+    swapChainCreateInfo.imageFormat = swap_chain_image_format = swapSurfaceFormat.format;
     swapChainCreateInfo.imageColorSpace = swapSurfaceFormat.colorSpace;
     swapChainCreateInfo.imageExtent = swap_chain_extent;
     swapChainCreateInfo.imageArrayLayers = 1;
@@ -322,12 +315,22 @@ void WEngine::create_swap_chain()
     swapChainCreateInfo.imageSharingMode = vk::SharingMode::eExclusive;
     swapChainCreateInfo.preTransform = swapSurfaceCapabilities.currentTransform;
     swapChainCreateInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
-    swapChainCreateInfo.presentMode = chooseSwapPresentMode(physical_device.getSurfacePresentModesKHR());
+    swapChainCreateInfo.presentMode = chooseSwapPresentMode(physical_device.getSurfacePresentModesKHR(surface));
     swapChainCreateInfo.clipped = vk::True;
     swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
 
     swap_chain = logical_device.createSwapchainKHR(swapChainCreateInfo);
+    swap_chain_extent = chooseSwapExtent(swapSurfaceCapabilities, window);
     swap_chain_images = swap_chain.getImages();
+}
+
+vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats)
+{
+    for (const auto& availableFormat : availableFormats)
+        if (availableFormat.format == vk::Format::eB8G8R8A8Srgb && availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+            return availableFormat;
+
+    return availableFormats.front();
 }
 
 vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities, GLFWwindow* window)
@@ -344,13 +347,12 @@ vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities, GL
     };
 }
 
-vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats)
+uint32_t chooseSwapMinImageCount(const vk::SurfaceCapabilitiesKHR& swapSurfaceCapabilities)
 {
-    for (const auto& availableFormat : availableFormats)
-        if (availableFormat.format == vk::Format::eB8G8R8A8Srgb && availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
-            return availableFormat;
+    auto minImageCount = std::max(3u, swapSurfaceCapabilities.minImageCount);
+    minImageCount = (swapSurfaceCapabilities.maxImageCount > 0 && minImageCount > swapSurfaceCapabilities.maxImageCount) ? swapSurfaceCapabilities.maxImageCount : minImageCount;
 
-    return availableFormats.front();
+    return minImageCount;
 }
 
 vk::PresentModeKHR choosePresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)
@@ -362,7 +364,7 @@ vk::PresentModeKHR choosePresentMode(const std::vector<vk::PresentModeKHR>& avai
     return vk::PresentModeKHR::eFifo;
 }
 
-void WEngine::create_swap_chain_views()
+void WEngine::create_image_views()
 {
     swap_chain_image_views.clear();
 
