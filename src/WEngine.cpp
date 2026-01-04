@@ -362,6 +362,22 @@ vk::PresentModeKHR choosePresentMode(const std::vector<vk::PresentModeKHR>& avai
     return vk::PresentModeKHR::eFifo;
 }
 
+void WEngine::create_swap_chain_views()
+{
+    swap_chain_image_views.clear();
+
+    vk::ImageViewCreateInfo imageViewCreateInfo {};
+    imageViewCreateInfo.viewType = vk::ImageViewType::e2D;
+    imageViewCreateInfo.format = swap_chain_image_format;
+    imageViewCreateInfo.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+
+    for (auto image : swap_chain_images)
+    {
+        imageViewCreateInfo.image = image;
+        swap_chain_image_views.emplace_back(logical_device, imageViewCreateInfo);
+    }
+}
+
 void WEngine::main_loop()
 {
     while (!glfwWindowShouldClose(window))
