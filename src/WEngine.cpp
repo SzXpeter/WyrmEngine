@@ -75,14 +75,14 @@ void WEngine::create_vulkan_instance()
     auto requiredLayers = getRequiredLayers(context);
     auto requiredExtensions = getRequiredExtensions(context);
 
-    vk::InstanceCreateInfo createInstanceInfo {
-        .pApplicationInfo = &appInfo,
-        .enabledLayerCount = static_cast<uint32_t>(requiredLayers.size()),
-        .ppEnabledLayerNames = requiredLayers.data(),
-        .enabledExtensionCount = static_cast<uint32_t>(requiredExtensions.size()),
-        .ppEnabledExtensionNames = requiredExtensions.data()
-    };
-    instance = vk::raii::Instance(context, createInstanceInfo);
+    vk::InstanceCreateInfo instanceCreateInfo {};
+    instanceCreateInfo.pApplicationInfo = &appInfo;
+    instanceCreateInfo.enabledLayerCount = static_cast<uint32_t>(requiredLayers.size());
+    instanceCreateInfo.ppEnabledLayerNames = requiredLayers.data();
+    instanceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(requiredExtensions.size());
+    instanceCreateInfo.ppEnabledExtensionNames = requiredExtensions.data();
+
+    instance = vk::raii::Instance(context, instanceCreateInfo);
 }
 
 std::vector<const char*> getRequiredExtensions(const vk::raii::Context& context)
@@ -147,12 +147,12 @@ void WEngine::setup_debug_messenger()
         vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation
     );
 
-    vk::DebugUtilsMessengerCreateInfoEXT createInfo {
-        .messageSeverity = severityFlags,
-        .messageType = messageTypeFlags,
-        .pfnUserCallback = &debugCallback
-    };
-    debug_messenger = instance.createDebugUtilsMessengerEXT(createInfo);
+    vk::DebugUtilsMessengerCreateInfoEXT debugCreateInfo {};
+    debugCreateInfo.messageSeverity = severityFlags;
+    debugCreateInfo.messageType = messageTypeFlags;
+    debugCreateInfo.pfnUserCallback = &debugCallback;
+
+    debug_messenger = instance.createDebugUtilsMessengerEXT(debugCreateInfo);
 }
 
 void WEngine::create_surface()
@@ -218,34 +218,32 @@ void WEngine::create_logical_device()
         {.extendedDynamicState = true}
     );
 
-    float queuePriority = .5f;
     std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
-    queueCreateInfos.push_back(
-        vk::DeviceQueueCreateInfo {
-            .queueFamilyIndex = graphicsIndex,
-            .queueCount = 1,
-            .pQueuePriorities = &queuePriority
-        }
-    );
+    float queuePriority = .5f;
+
+    vk::DeviceQueueCreateInfo graphicsQueueCreateInfo {};
+    graphicsQueueCreateInfo.queueFamilyIndex = graphicsIndex;
+    graphicsQueueCreateInfo.queueCount = 1;
+    graphicsQueueCreateInfo.pQueuePriorities = &queuePriority;
+
+    queueCreateInfos.push_back(graphicsQueueCreateInfo);
 
     if (!sameQFP)
     {
-        queueCreateInfos.push_back(
-            vk::DeviceQueueCreateInfo {
-                .queueFamilyIndex = presentationIndex,
-                .queueCount = 1,
-                .pQueuePriorities = &queuePriority
-            }
-        );
+        vk::DeviceQueueCreateInfo presentQueueCreateInfo {};
+        presentQueueCreateInfo.queueFamilyIndex = presentationIndex;
+        presentQueueCreateInfo.queueCount = 1;
+        presentQueueCreateInfo.pQueuePriorities = &queuePriority;
+
+        queueCreateInfos.push_back(presentQueueCreateInfo);
     }
 
-    vk::DeviceCreateInfo deviceCreateInfo {
-        .pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>(),
-        .queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size()),
-        .pQueueCreateInfos = queueCreateInfos.data(),
-        .enabledExtensionCount =  static_cast<uint32_t>(deviceExtensions.size()),
-        .ppEnabledExtensionNames = deviceExtensions.data()
-    };
+    vk::DeviceCreateInfo deviceCreateInfo {};
+    deviceCreateInfo.pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>();
+    deviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
+    deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
+    deviceCreateInfo.enabledExtensionCount =  static_cast<uint32_t>(deviceExtensions.size());
+    deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
     logical_device = vk::raii::Device(physical_device, deviceCreateInfo);
 
@@ -255,8 +253,6 @@ void WEngine::create_logical_device()
 
 uint32_t getPresentationQFPIndex(const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::SurfaceKHR& surface, uint32_t& graphicsIndex)
 {
-    // TODO: fix queue creation logic (currently break if present_queue != graphics_queue)
-
     auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
 
     auto presentationIndex = physicalDevice.getSurfaceSupportKHR(graphicsIndex, *surface) ? graphicsIndex : static_cast<uint32_t>( queueFamilyProperties.size() );
@@ -294,6 +290,76 @@ uint32_t getPresentationQFPIndex(const vk::raii::PhysicalDevice& physicalDevice,
     }
 
     return presentationIndex;
+}
+
+vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities, GLFWwindow* window);
+vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
+vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
+void WEngine::create_swap_chain()
+{
+    auto swapSurfaceCapabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
+    auto swapSurfaceFormat = chooseSwapSurfaceFormat(physical_device.getSurfaceFormatsKHR(surface));
+
+    swap_chain_image_format = swapSurfaceFormat.format;
+    swap_chain_extent = chooseSwapExtent(swapSurfaceCapabilities, window);
+
+    auto minImageCount = std::max(3u, swapSurfaceCapabilities.minImageCount);
+    minImageCount = (swapSurfaceCapabilities.maxImageCount > 0 && minImageCount > swapSurfaceCapabilities.maxImageCount) ? swapSurfaceCapabilities.maxImageCount : minImageCount;
+
+    uint32_t imageCount = swapSurfaceCapabilities.minImageCount + 1;
+    if (swapSurfaceCapabilities.maxImageCount > 0 && imageCount > swapSurfaceCapabilities.maxImageCount)
+        imageCount = swapSurfaceCapabilities.maxImageCount;
+
+    vk::SwapchainCreateInfoKHR swapChainCreateInfo {};
+    swapChainCreateInfo.flags = vk::SwapchainCreateFlagsKHR{};
+    swapChainCreateInfo.surface = surface;
+    swapChainCreateInfo.minImageCount = minImageCount;
+    swapChainCreateInfo.imageFormat = swap_chain_image_format;
+    swapChainCreateInfo.imageColorSpace = swapSurfaceFormat.colorSpace;
+    swapChainCreateInfo.imageExtent = swap_chain_extent;
+    swapChainCreateInfo.imageArrayLayers = 1;
+    swapChainCreateInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
+    swapChainCreateInfo.imageSharingMode = vk::SharingMode::eExclusive;
+    swapChainCreateInfo.preTransform = swapSurfaceCapabilities.currentTransform;
+    swapChainCreateInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+    swapChainCreateInfo.presentMode = chooseSwapPresentMode(physical_device.getSurfacePresentModesKHR());
+    swapChainCreateInfo.clipped = vk::True;
+    swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
+
+    swap_chain = logical_device.createSwapchainKHR(swapChainCreateInfo);
+    swap_chain_images = swap_chain.getImages();
+}
+
+vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities, GLFWwindow* window)
+{
+    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
+        return capabilities.currentExtent;
+
+    int width, height;
+    glfwGetFramebufferSize(window, &width, &height);
+
+    return {
+        std::clamp<uint32_t>(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
+        std::clamp<uint32_t>(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)
+    };
+}
+
+vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats)
+{
+    for (const auto& availableFormat : availableFormats)
+        if (availableFormat.format == vk::Format::eB8G8R8A8Srgb && availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+            return availableFormat;
+
+    return availableFormats.front();
+}
+
+vk::PresentModeKHR choosePresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)
+{
+    for (const auto& availablePresentMode : availablePresentModes)
+        if (availablePresentMode == vk::PresentModeKHR::eMailbox)
+            return availablePresentMode;
+
+    return vk::PresentModeKHR::eFifo;
 }
 
 void WEngine::main_loop()

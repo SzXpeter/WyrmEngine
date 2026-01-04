@@ -34,6 +34,11 @@ private:
     vk::raii::Queue graphics_queue = nullptr;
     vk::raii::Queue present_queue = nullptr;
 
+    vk::raii::SwapchainKHR swap_chain = nullptr;
+    std::vector<vk::Image> swap_chain_images;
+    vk::Format swap_chain_image_format = vk::Format::eUndefined;
+    vk::Extent2D swap_chain_extent;
+
     vk::raii::DebugUtilsMessengerEXT debug_messenger = nullptr;
 
     void init_window();
@@ -44,6 +49,7 @@ private:
     void create_surface();
     void pick_physical_device();
     void create_logical_device();
+    void create_swap_chain();
 
     void main_loop();
     void cleanup();
