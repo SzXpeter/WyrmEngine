@@ -28,17 +28,13 @@ void WEngine::Run()
 
 std::pair<uint32_t, uint32_t> WEngine::GetWindowSize()
 {
-    return window_size;
+    return {width, height};
 }
 
 void WEngine::SetWindowSize(uint32_t width, uint32_t height)
 {
-    window_size = { width, height };
-}
-
-void WEngine::SetWindowSize(const std::pair<uint32_t, uint32_t>& windowSize)
-{
-    window_size = windowSize;
+    this->width = width;
+    this->height = height;
 }
 
 void WEngine::init_window()
@@ -52,22 +48,23 @@ void WEngine::init_window()
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-    window = glfwCreateWindow(window_size.first, window_size.second, "Vulkan", nullptr, nullptr);
+    window = glfwCreateWindow(width, height, "Vulkan", nullptr, nullptr);
 }
 
-vk::raii::Instance createVulkanInstance(const vk::raii::Context& context);
 void WEngine::init_vulkan()
 {
-    instance = createVulkanInstance(context);
+    create_vulkan_instance();
     setup_debug_messenger();
+    create_surface();
     pick_physical_device();
+    create_logical_device();
 }
 
 std::vector<const char*> getRequiredLayers(const vk::raii::Context& context);
 std::vector<const char*> getRequiredExtensions(const vk::raii::Context& context);
-vk::raii::Instance createVulkanInstance(const vk::raii::Context& context)
+void WEngine::create_vulkan_instance()
 {
-    constexpr vk::ApplicationInfo app_info {
+    constexpr vk::ApplicationInfo appInfo {
         .pApplicationName   = "WEngine",
         .applicationVersion = VK_MAKE_VERSION( 1, 0, 0 ),
         .pEngineName        = "No Engine",
@@ -78,14 +75,14 @@ vk::raii::Instance createVulkanInstance(const vk::raii::Context& context)
     auto requiredLayers = getRequiredLayers(context);
     auto requiredExtensions = getRequiredExtensions(context);
 
-    vk::InstanceCreateInfo createInfo {
-        .pApplicationInfo = &app_info,
+    vk::InstanceCreateInfo createInstanceInfo {
+        .pApplicationInfo = &appInfo,
         .enabledLayerCount = static_cast<uint32_t>(requiredLayers.size()),
         .ppEnabledLayerNames = requiredLayers.data(),
         .enabledExtensionCount = static_cast<uint32_t>(requiredExtensions.size()),
         .ppEnabledExtensionNames = requiredExtensions.data()
     };
-    return {context, createInfo};
+    instance = vk::raii::Instance(context, createInstanceInfo);
 }
 
 std::vector<const char*> getRequiredExtensions(const vk::raii::Context& context)
@@ -158,6 +155,15 @@ void WEngine::setup_debug_messenger()
     debug_messenger = instance.createDebugUtilsMessengerEXT(createInfo);
 }
 
+void WEngine::create_surface()
+{
+    VkSurfaceKHR _surface;
+    if (glfwCreateWindowSurface(*instance, window, nullptr, &_surface) != 0)
+        throw std::runtime_error("Failed to create window surface");
+
+    surface = vk::raii::SurfaceKHR(instance, _surface);
+}
+
 void WEngine::pick_physical_device()
 {
     auto physicalDevices = instance.enumeratePhysicalDevices();
@@ -192,17 +198,19 @@ void WEngine::pick_physical_device()
         throw std::runtime_error("failed to find a suitable GPU");
 }
 
-uint32_t findQueueFamilies(const vk::raii::PhysicalDevice& physicalDevice, vk::QueueFlagBits requestedProperty);
+uint32_t getPresentationQFPIndex(const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::SurfaceKHR& surface, uint32_t& graphicsIndex);
 void WEngine::create_logical_device()
 {
-    auto graphicsIndex = findQueueFamilies(physical_device, vk::QueueFlagBits::eGraphics);
+    auto queueFamilyProperties = physical_device.getQueueFamilyProperties();
 
-    float queuePriority = .5f;
-    vk::DeviceQueueCreateInfo queueCreateInfo {
-        .queueFamilyIndex = graphicsIndex,
-        .queueCount = 1,
-        .pQueuePriorities = &queuePriority
-    };
+    auto graphicsQueueFamilyProperty = std::ranges::find_if(queueFamilyProperties,
+        [](const auto& qfp) {
+            return (qfp.queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0);
+        });
+
+    uint32_t graphicsIndex = std::ranges::distance(queueFamilyProperties.begin(), graphicsQueueFamilyProperty);
+    uint32_t presentationIndex = getPresentationQFPIndex(physical_device, surface, graphicsIndex);
+    bool sameQFP = graphicsIndex == presentationIndex;
 
     vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> featureChain (
         {},
@@ -210,29 +218,82 @@ void WEngine::create_logical_device()
         {.extendedDynamicState = true}
     );
 
+    float queuePriority = .5f;
+    std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
+    queueCreateInfos.push_back(
+        vk::DeviceQueueCreateInfo {
+            .queueFamilyIndex = graphicsIndex,
+            .queueCount = 1,
+            .pQueuePriorities = &queuePriority
+        }
+    );
+
+    if (!sameQFP)
+    {
+        queueCreateInfos.push_back(
+            vk::DeviceQueueCreateInfo {
+                .queueFamilyIndex = presentationIndex,
+                .queueCount = 1,
+                .pQueuePriorities = &queuePriority
+            }
+        );
+    }
+
     vk::DeviceCreateInfo deviceCreateInfo {
         .pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>(),
-        .queueCreateInfoCount = 1,
-        .pQueueCreateInfos = &queueCreateInfo,
+        .queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size()),
+        .pQueueCreateInfos = queueCreateInfos.data(),
         .enabledExtensionCount =  static_cast<uint32_t>(deviceExtensions.size()),
         .ppEnabledExtensionNames = deviceExtensions.data()
     };
 
-    device = vk::raii::Device(physical_device, deviceCreateInfo);
+    logical_device = vk::raii::Device(physical_device, deviceCreateInfo);
 
-    graphics_queue = vk::raii::Queue(device, graphicsIndex, 0);
+    graphics_queue = logical_device.getQueue(graphicsIndex, 0);
+    present_queue = logical_device.getQueue(presentationIndex, 0);
 }
 
-uint32_t findQueueFamilies(const vk::raii::PhysicalDevice& physicalDevice, vk::QueueFlagBits requestedProperty)
+uint32_t getPresentationQFPIndex(const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::SurfaceKHR& surface, uint32_t& graphicsIndex)
 {
+    // TODO: fix queue creation logic (currently break if present_queue != graphics_queue)
+
     auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
 
-    auto requestedQueueFamilyProperty = std::ranges::find_if(queueFamilyProperties,
-        [requestedProperty](const auto& qfp) {
-            return (qfp.queueFlags & requestedProperty) != static_cast<vk::QueueFlags>(0);
-        });
+    auto presentationIndex = physicalDevice.getSurfaceSupportKHR(graphicsIndex, *surface) ? graphicsIndex : static_cast<uint32_t>( queueFamilyProperties.size() );
+    if ( presentationIndex == queueFamilyProperties.size() )
+    {
+        // the graphicsIndex doesn't support present -> look for another family index that supports both
+        // graphics and present
+        for ( size_t i = 0; i < queueFamilyProperties.size(); i++ )
+        {
+            if ( ( queueFamilyProperties[i].queueFlags & vk::QueueFlagBits::eGraphics ) &&
+                 physicalDevice.getSurfaceSupportKHR( static_cast<uint32_t>( i ), *surface ) )
+            {
+                graphicsIndex = static_cast<uint32_t>( i );
+                presentationIndex  = graphicsIndex;
+                break;
+            }
+        }
+        if ( presentationIndex == queueFamilyProperties.size() )
+        {
+            // there's nothing like a single family index that supports both graphics and present -> look for another
+            // family index that supports present
+            for ( size_t i = 0; i < queueFamilyProperties.size(); i++ )
+            {
+                if ( physicalDevice.getSurfaceSupportKHR( static_cast<uint32_t>( i ), *surface ) )
+                {
+                    presentationIndex = static_cast<uint32_t>( i );
+                    break;
+                }
+            }
+        }
+    }
+    if ( ( graphicsIndex == queueFamilyProperties.size() ) || ( presentationIndex == queueFamilyProperties.size() ) )
+    {
+        throw std::runtime_error( "Could not find a queue for graphics or present -> terminating" );
+    }
 
-    return std::ranges::distance(queueFamilyProperties.begin(), requestedQueueFamilyProperty);
+    return presentationIndex;
 }
 
 void WEngine::main_loop()

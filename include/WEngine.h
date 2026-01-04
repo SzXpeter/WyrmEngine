@@ -18,25 +18,30 @@ public:
 
     std::pair<uint32_t, uint32_t> GetWindowSize();
     void SetWindowSize(uint32_t width, uint32_t height);
-    void SetWindowSize(const std::pair<uint32_t, uint32_t>& windowSize);
 
 private:
-    std::pair<uint32_t, uint32_t> window_size;
+    uint32_t width = 1280;
+    uint32_t height = 720;
     GLFWwindow* window = nullptr;
 
     vk::raii::Context context;
     vk::raii::Instance instance = nullptr;
+    vk::raii::SurfaceKHR surface = nullptr;
 
     vk::raii::PhysicalDevice physical_device = nullptr;
-    vk::raii::Device device = nullptr;
+    vk::raii::Device logical_device = nullptr;
+
     vk::raii::Queue graphics_queue = nullptr;
+    vk::raii::Queue present_queue = nullptr;
 
     vk::raii::DebugUtilsMessengerEXT debug_messenger = nullptr;
 
     void init_window();
 
     void init_vulkan();
+    void create_vulkan_instance();
     void setup_debug_messenger();
+    void create_surface();
     void pick_physical_device();
     void create_logical_device();
 
