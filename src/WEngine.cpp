@@ -4,8 +4,7 @@
 
 #include "WEngine.h"
 
-#include "json.hpp"
-
+#include <fstream>
 #include <iostream>
 #include <sstream>
 
@@ -37,6 +36,31 @@ void WEngine::SetWindowSize(uint32_t width, uint32_t height)
     this->height = height;
 }
 
+std::vector<char> WEngine::ReadShaderFile(const std::string &filename)
+{
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+    if (!file.is_open()) throw std::runtime_error("failed to open file!");
+
+    std::vector<char> buffer(file.tellg());
+    file.seekg(0, std::ios::beg);
+    file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+
+    std::cout << buffer.size() << std::endl;
+
+    file.close();
+    return buffer;
+}
+
+vk::raii::ShaderModule WEngine::CreateShaderModule(const std::vector<char>& code)
+{
+    vk::ShaderModuleCreateInfo shaderModuleCreateInfo {};
+    shaderModuleCreateInfo.codeSize = code.size() * sizeof(char);
+    shaderModuleCreateInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+    return {logical_device, shaderModuleCreateInfo};
+}
+
 void WEngine::init_window()
 {
 #ifdef __linux__
@@ -60,6 +84,7 @@ void WEngine::init_vulkan()
     create_logical_device();
     create_swap_chain();
     create_image_views();
+    create_graphics_pipeline();
 }
 
 std::vector<const char*> getRequiredLayers(const vk::raii::Context& context);
@@ -381,6 +406,23 @@ void WEngine::create_image_views()
 
 void WEngine::create_graphics_pipeline()
 {
+    auto shaderModule = CreateShaderModule(ReadShaderFile("src/shaders/slang.spv"));
+
+    vk::PipelineShaderStageCreateInfo vertexShaderInfo {};
+    vertexShaderInfo.stage = vk::ShaderStageFlagBits::eVertex;
+    vertexShaderInfo.module = shaderModule;
+    vertexShaderInfo.pName = "VertexMain";
+
+    vk::PipelineShaderStageCreateInfo fragmentShaderInfo {};
+    fragmentShaderInfo.stage = vk::ShaderStageFlagBits::eFragment;
+    fragmentShaderInfo.module = shaderModule;
+    fragmentShaderInfo.pName = "FragmentMain";
+
+    vk::PipelineShaderStageCreateInfo shaderStages[] = {vertexShaderInfo, fragmentShaderInfo};
+
+    // vk::PipelineVertexInputStateCreateInfo vertexInputInfo {};
+    // vk::PipelineInputAssemblyStateCreateInfo inputAssembly {};
+    // inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
 }
 
 void WEngine::main_loop()

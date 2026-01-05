@@ -19,6 +19,9 @@ public:
     std::pair<uint32_t, uint32_t> GetWindowSize();
     void SetWindowSize(uint32_t width, uint32_t height);
 
+    static std::vector<char> ReadShaderFile(const std::string& filename);
+    [[nodiscard]] vk::raii::ShaderModule CreateShaderModule(const std::vector<char>& code);
+
 private:
     uint32_t width = 1280;
     uint32_t height = 720;
