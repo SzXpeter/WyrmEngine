@@ -519,7 +519,7 @@ void WEngine::create_command_buffer()
     command_buffer = std::move(vk::raii::CommandBuffers(logical_device, allocateInfo).front());
 }
 
-void WEngine::record_command_buffer(uint32_t imageIndex)
+void WEngine::record_command_buffer(uint32_t imageIndex) const
 {
     command_buffer.begin({});
     transition_image_layout(
@@ -595,12 +595,56 @@ void WEngine::transition_image_layout(uint32_t imageIndex, vk::ImageLayout oldLa
     command_buffer.pipelineBarrier2(dependencyInfo);
 }
 
+void WEngine::create_sync_object()
+{
+    present_complete_semaphore = vk::raii::Semaphore(logical_device, vk::SemaphoreCreateInfo());
+    render_finished_semaphore = vk::raii::Semaphore(logical_device, vk::SemaphoreCreateInfo());
+
+    vk::FenceCreateInfo fenceInfo {};
+    fenceInfo.flags = vk::FenceCreateFlagBits::eSignaled;
+    draw_fence = vk::raii::Fence(logical_device, fenceInfo);
+}
+
 void WEngine::main_loop() const
 {
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
+        draw_frame();
     }
+
+    logical_device.waitIdle();
+}
+
+void WEngine::draw_frame() const
+{
+    auto fenceResult = logical_device.waitForFences(*draw_fence, vk::True, UINT64_MAX);
+
+    auto [result, imageIndex] = swap_chain.acquireNextImage(UINT64_MAX, *present_complete_semaphore, nullptr);
+
+    record_command_buffer(imageIndex);
+    logical_device.resetFences(*draw_fence);
+
+    vk::PipelineStageFlags waitDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+    vk::SubmitInfo submitInfo {};
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = &*present_complete_semaphore;
+    submitInfo.pWaitDstStageMask = &waitDstStageMask;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &*command_buffer;
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = &*render_finished_semaphore;
+
+    graphics_queue.submit(submitInfo, *draw_fence);
+
+    vk::PresentInfoKHR presentInfo {};
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = &*render_finished_semaphore;
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = &*swap_chain;
+    presentInfo.pImageIndices = &imageIndex;
+
+    result = present_queue.presentKHR(presentInfo);
 }
 
 void WEngine::cleanup() const

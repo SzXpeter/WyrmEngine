@@ -50,6 +50,10 @@ private:
     vk::raii::CommandPool command_pool = nullptr;
     vk::raii::CommandBuffer command_buffer = nullptr;
 
+    vk::raii::Semaphore present_complete_semaphore = nullptr;
+    vk::raii::Semaphore render_finished_semaphore = nullptr;
+    vk::raii::Fence draw_fence = nullptr;
+
     vk::raii::DebugUtilsMessengerEXT debug_messenger = nullptr;
 
     void init_window();
@@ -65,10 +69,13 @@ private:
     void create_graphics_pipeline();
     void create_command_pool();
     void create_command_buffer();
-    void record_command_buffer(uint32_t imageIndex);
+    void record_command_buffer(uint32_t imageIndex) const;
     void transition_image_layout(uint32_t imageIndex, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, vk::AccessFlags2 srcAccessMask, vk::AccessFlags2 dstAccessMask, vk::PipelineStageFlags2 srcStageMask, vk::PipelineStageFlags2 dstStageMask) const;
+    void create_sync_object();
 
     void main_loop() const;
+    void draw_frame() const;
+
     void cleanup() const;
 
     std::vector<const char*> deviceExtensions = {
