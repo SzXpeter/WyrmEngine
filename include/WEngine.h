@@ -17,7 +17,7 @@ public:
     void Run();
 
     std::pair<uint32_t, uint32_t> GetWindowSize();
-    void SetWindowSize(uint32_t width, uint32_t height);
+    void SetWindowSize(uint32_t _width, uint32_t _height);
 
     static std::vector<char> ReadShaderFile(const std::string& filename);
     [[nodiscard]] vk::raii::ShaderModule CreateShaderModule(const std::vector<char>& code);
@@ -34,6 +34,7 @@ private:
     vk::raii::PhysicalDevice physical_device = nullptr;
     vk::raii::Device logical_device = nullptr;
 
+    uint32_t graphics_queue_index = ~0;
     vk::raii::Queue graphics_queue = nullptr;
     vk::raii::Queue present_queue = nullptr;
 
@@ -45,6 +46,9 @@ private:
 
     vk::raii::Pipeline graphics_pipeline = nullptr;
     vk::raii::PipelineLayout pipeline_layout = nullptr;
+
+    vk::raii::CommandPool command_pool = nullptr;
+    vk::raii::CommandBuffer command_buffer = nullptr;
 
     vk::raii::DebugUtilsMessengerEXT debug_messenger = nullptr;
 
@@ -59,6 +63,10 @@ private:
     void create_swap_chain();
     void create_image_views();
     void create_graphics_pipeline();
+    void create_command_pool();
+    void create_command_buffer();
+    void record_command_buffer(uint32_t imageIndex);
+    void transition_image_layout(uint32_t imageIndex, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, vk::AccessFlags2 srcAccessMask, vk::AccessFlags2 dstAccessMask, vk::PipelineStageFlags2 srcStageMask, vk::PipelineStageFlags2 dstStageMask) const;
 
     void main_loop() const;
     void cleanup() const;

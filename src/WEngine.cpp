@@ -85,6 +85,8 @@ void WEngine::init_vulkan()
     create_swap_chain();
     create_image_views();
     create_graphics_pipeline();
+    create_command_pool();
+    create_command_buffer();
 }
 
 std::vector<const char*> getRequiredLayers(const vk::raii::Context& context);
@@ -258,7 +260,7 @@ void WEngine::create_logical_device()
     float queuePriority = .5f;
 
     vk::DeviceQueueCreateInfo graphicsQueueCreateInfo {};
-    graphicsQueueCreateInfo.queueFamilyIndex = graphicsIndex;
+    graphicsQueueCreateInfo.queueFamilyIndex = graphics_queue_index = graphicsIndex;
     graphicsQueueCreateInfo.queueCount = 1;
     graphicsQueueCreateInfo.pQueuePriorities = &queuePriority;
 
@@ -496,6 +498,101 @@ void WEngine::create_graphics_pipeline()
     pipelineInfo.renderPass = nullptr;
 
     graphics_pipeline = {logical_device, nullptr, pipelineInfo};
+}
+
+void WEngine::create_command_pool()
+{
+    vk::CommandPoolCreateInfo poolInfo {};
+    poolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
+    poolInfo.queueFamilyIndex = graphics_queue_index;
+
+    command_pool = {logical_device, poolInfo};
+}
+
+void WEngine::create_command_buffer()
+{
+    vk::CommandBufferAllocateInfo allocateInfo {};
+    allocateInfo.commandPool = command_pool;
+    allocateInfo.level = vk::CommandBufferLevel::ePrimary;
+    allocateInfo.commandBufferCount = 1;
+
+    command_buffer = std::move(vk::raii::CommandBuffers(logical_device, allocateInfo).front());
+}
+
+void WEngine::record_command_buffer(uint32_t imageIndex)
+{
+    command_buffer.begin({});
+    transition_image_layout(
+        imageIndex,
+        vk::ImageLayout::eUndefined,
+        vk::ImageLayout::eColorAttachmentOptimal,
+        {},
+        vk::AccessFlagBits2::eColorAttachmentWrite,
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput
+    );
+
+    vk::ClearValue clearColor = vk::ClearColorValue(1.0f, 0.0f, 1.0f, 1.0f);
+    vk::RenderingAttachmentInfo attachmentInfo {};
+    attachmentInfo.imageView = swap_chain_image_views[imageIndex];
+    attachmentInfo.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+    attachmentInfo.loadOp = vk::AttachmentLoadOp::eClear;
+    attachmentInfo.storeOp = vk::AttachmentStoreOp::eStore;
+    attachmentInfo.clearValue = clearColor;
+
+    vk::RenderingInfo renderingInfo {};
+    renderingInfo.renderArea = {.offset = {0, 0}, .extent = swap_chain_extent};
+    renderingInfo.layerCount = 1;
+    renderingInfo.colorAttachmentCount = 1;
+    renderingInfo.pColorAttachments = &attachmentInfo;
+
+    command_buffer.beginRendering(renderingInfo);
+    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphics_pipeline);
+    command_buffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swap_chain_extent.width), static_cast<float>(swap_chain_extent.height), 0.0f, 1.0f));
+    command_buffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swap_chain_extent));
+
+    command_buffer.draw(3, 1, 0, 0);
+
+    command_buffer.endRendering();
+    transition_image_layout(
+        imageIndex,
+        vk::ImageLayout::eColorAttachmentOptimal,
+        vk::ImageLayout::ePresentSrcKHR,
+        vk::AccessFlagBits2::eColorAttachmentWrite,
+        {},
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        vk::PipelineStageFlagBits2::eBottomOfPipe
+    );
+    command_buffer.end();
+}
+
+void WEngine::transition_image_layout(uint32_t imageIndex, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, vk::AccessFlags2 srcAccessMask, vk::AccessFlags2 dstAccessMask, vk::PipelineStageFlags2 srcStageMask, vk::PipelineStageFlags2 dstStageMask) const
+{
+    vk::ImageSubresourceRange imgSubresourceRange {};
+    imgSubresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+    imgSubresourceRange.baseMipLevel = 0;
+    imgSubresourceRange.levelCount = 1;
+    imgSubresourceRange.baseArrayLayer = 0;
+    imgSubresourceRange.layerCount = 1;
+
+    vk::ImageMemoryBarrier2 barrier {};
+    barrier.srcStageMask = srcStageMask;
+    barrier.srcAccessMask = srcAccessMask;
+    barrier.dstStageMask = dstStageMask;
+    barrier.dstAccessMask = dstAccessMask;
+    barrier.oldLayout = oldLayout;
+    barrier.newLayout = newLayout;
+    barrier.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
+    barrier.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
+    barrier.image = swap_chain_images[imageIndex];
+    barrier.subresourceRange = imgSubresourceRange;
+
+    vk::DependencyInfo dependencyInfo {};
+    dependencyInfo.dependencyFlags = {};
+    dependencyInfo.imageMemoryBarrierCount = 1;
+    dependencyInfo.pImageMemoryBarriers = &barrier;
+
+    command_buffer.pipelineBarrier2(dependencyInfo);
 }
 
 void WEngine::main_loop() const
