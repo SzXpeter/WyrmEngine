@@ -39,9 +39,12 @@ private:
 
     vk::raii::SwapchainKHR swap_chain = nullptr;
     vk::Extent2D swap_chain_extent;
-    vk::Format swap_chain_image_format = vk::Format::eUndefined;
     std::vector<vk::Image> swap_chain_images;
+    vk::Format swap_chain_image_format = vk::Format::eUndefined;
     std::vector<vk::raii::ImageView> swap_chain_image_views;
+
+    vk::raii::Pipeline graphics_pipeline = nullptr;
+    vk::raii::PipelineLayout pipeline_layout = nullptr;
 
     vk::raii::DebugUtilsMessengerEXT debug_messenger = nullptr;
 
@@ -57,8 +60,8 @@ private:
     void create_image_views();
     void create_graphics_pipeline();
 
-    void main_loop();
-    void cleanup();
+    void main_loop() const;
+    void cleanup() const;
 
     std::vector<const char*> deviceExtensions = {
         vk::KHRSwapchainExtensionName,

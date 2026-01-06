@@ -30,10 +30,10 @@ std::pair<uint32_t, uint32_t> WEngine::GetWindowSize()
     return {width, height};
 }
 
-void WEngine::SetWindowSize(uint32_t width, uint32_t height)
+void WEngine::SetWindowSize(uint32_t _width, uint32_t _height)
 {
-    this->width = width;
-    this->height = height;
+    width = _width;
+    height = _height;
 }
 
 std::vector<char> WEngine::ReadShaderFile(const std::string &filename)
@@ -91,16 +91,15 @@ std::vector<const char*> getRequiredLayers(const vk::raii::Context& context);
 std::vector<const char*> getRequiredExtensions(const vk::raii::Context& context);
 void WEngine::create_vulkan_instance()
 {
-    constexpr vk::ApplicationInfo appInfo {
-        .pApplicationName   = "WEngine",
-        .applicationVersion = VK_MAKE_VERSION( 1, 0, 0 ),
-        .pEngineName        = "No Engine",
-        .engineVersion      = VK_MAKE_VERSION( 1, 0, 0 ),
-        .apiVersion         = vk::ApiVersion14
-    };
+    vk::ApplicationInfo appInfo {};
+    appInfo.pApplicationName = "WEngine";
+    appInfo.applicationVersion = VK_MAKE_VERSION( 1, 0, 0 );
+    appInfo.pEngineName = "No Engine";
+    appInfo.engineVersion = VK_MAKE_VERSION( 1, 0, 0 );
+    appInfo.apiVersion  = vk::ApiVersion14;
 
-    auto requiredLayers = getRequiredLayers(context);
-    auto requiredExtensions = getRequiredExtensions(context);
+    const auto requiredLayers = getRequiredLayers(context);
+    const auto requiredExtensions = getRequiredExtensions(context);
 
     vk::InstanceCreateInfo instanceCreateInfo {};
     instanceCreateInfo.pApplicationInfo = &appInfo;
@@ -161,14 +160,16 @@ std::vector<const char*> getRequiredLayers(const vk::raii::Context& context)
 
 void WEngine::setup_debug_messenger()
 {
+    // ReSharper disable CppDFAUnreachableCode
     if constexpr (!enableValidationLayers) return;
+    // ReSharper restore CppDFAUnreachableCode
 
-    vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(
+    constexpr vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(
         vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
         vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
         vk::DebugUtilsMessageSeverityFlagBitsEXT::eError
     );
-    vk::DebugUtilsMessageTypeFlagsEXT messageTypeFlags(
+    constexpr vk::DebugUtilsMessageTypeFlagsEXT messageTypeFlags(
         vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
         vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
         vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation
@@ -239,11 +240,19 @@ void WEngine::create_logical_device()
     uint32_t presentationIndex = getPresentationQFPIndex(physical_device, surface, graphicsIndex);
     bool sameQFP = graphicsIndex == presentationIndex;
 
-    vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> featureChain (
-        {},
-        {.dynamicRendering = true},
-        {.extendedDynamicState = true}
-    );
+    vk::PhysicalDeviceFeatures2 physicalDeviceFeatures2 {};
+
+    vk::PhysicalDeviceVulkan11Features vulkan11Features {};
+    vulkan11Features.pNext = &physicalDeviceFeatures2;
+    vulkan11Features.shaderDrawParameters = true;
+
+    vk::PhysicalDeviceVulkan13Features vulkan13Features{};
+    vulkan13Features.pNext = &vulkan11Features;
+    vulkan13Features.dynamicRendering = true;
+
+    vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicStateFeatures {};
+    extendedDynamicStateFeatures.pNext = &vulkan13Features;
+    extendedDynamicStateFeatures.extendedDynamicState = true;
 
     std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
     float queuePriority = .5f;
@@ -266,7 +275,7 @@ void WEngine::create_logical_device()
     }
 
     vk::DeviceCreateInfo deviceCreateInfo {};
-    deviceCreateInfo.pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>();
+    deviceCreateInfo.pNext = &extendedDynamicStateFeatures;
     deviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
     deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
     deviceCreateInfo.enabledExtensionCount =  static_cast<uint32_t>(deviceExtensions.size());
@@ -280,7 +289,7 @@ void WEngine::create_logical_device()
 
 uint32_t getPresentationQFPIndex(const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::SurfaceKHR& surface, uint32_t& graphicsIndex)
 {
-    auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
+    const auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
 
     auto presentationIndex = physicalDevice.getSurfaceSupportKHR(graphicsIndex, *surface) ? graphicsIndex : static_cast<uint32_t>( queueFamilyProperties.size() );
     if ( presentationIndex == queueFamilyProperties.size() )
@@ -325,12 +334,12 @@ uint32_t chooseSwapMinImageCount(const vk::SurfaceCapabilitiesKHR& swapSurfaceCa
 vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
 void WEngine::create_swap_chain()
 {
-    auto swapSurfaceCapabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
-    auto swapSurfaceFormat = chooseSwapSurfaceFormat(physical_device.getSurfaceFormatsKHR(surface));
+    auto swapSurfaceCapabilities = physical_device.getSurfaceCapabilitiesKHR(*surface);
+    auto swapSurfaceFormat = chooseSwapSurfaceFormat(physical_device.getSurfaceFormatsKHR(*surface));
 
     vk::SwapchainCreateInfoKHR swapChainCreateInfo {};
     swapChainCreateInfo.flags = vk::SwapchainCreateFlagsKHR{};
-    swapChainCreateInfo.surface = surface;
+    swapChainCreateInfo.surface = *surface;
     swapChainCreateInfo.minImageCount = chooseSwapMinImageCount(swapSurfaceCapabilities);
     swapChainCreateInfo.imageFormat = swap_chain_image_format = swapSurfaceFormat.format;
     swapChainCreateInfo.imageColorSpace = swapSurfaceFormat.colorSpace;
@@ -340,7 +349,7 @@ void WEngine::create_swap_chain()
     swapChainCreateInfo.imageSharingMode = vk::SharingMode::eExclusive;
     swapChainCreateInfo.preTransform = swapSurfaceCapabilities.currentTransform;
     swapChainCreateInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
-    swapChainCreateInfo.presentMode = chooseSwapPresentMode(physical_device.getSurfacePresentModesKHR(surface));
+    swapChainCreateInfo.presentMode = chooseSwapPresentMode(physical_device.getSurfacePresentModesKHR(*surface));
     swapChainCreateInfo.clipped = vk::True;
     swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
 
@@ -406,7 +415,7 @@ void WEngine::create_image_views()
 
 void WEngine::create_graphics_pipeline()
 {
-    auto shaderModule = CreateShaderModule(ReadShaderFile("src/shaders/slang.spv"));
+    auto shaderModule = CreateShaderModule(ReadShaderFile("src/shaders/shader.spv"));
 
     vk::PipelineShaderStageCreateInfo vertexShaderInfo {};
     vertexShaderInfo.stage = vk::ShaderStageFlagBits::eVertex;
@@ -419,13 +428,77 @@ void WEngine::create_graphics_pipeline()
     fragmentShaderInfo.pName = "FragmentMain";
 
     vk::PipelineShaderStageCreateInfo shaderStages[] = {vertexShaderInfo, fragmentShaderInfo};
+    vk::PipelineVertexInputStateCreateInfo vertexInputInfo {};
 
-    // vk::PipelineVertexInputStateCreateInfo vertexInputInfo {};
-    // vk::PipelineInputAssemblyStateCreateInfo inputAssembly {};
-    // inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
+    vk::PipelineInputAssemblyStateCreateInfo inputAssembly {};
+    inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
+
+    std::vector dynamicStates = {
+        vk::DynamicState::eViewport,
+        vk::DynamicState::eScissor
+    };
+    vk::PipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.dynamicStateCount = dynamicStates.size();
+    dynamicState.pDynamicStates = dynamicStates.data();
+
+    vk::PipelineViewportStateCreateInfo viewPort {};
+    viewPort.viewportCount = 1;
+    viewPort.scissorCount = 1;
+
+    vk::PipelineRasterizationStateCreateInfo rasterizer {};
+    rasterizer.depthClampEnable = vk::False;
+    rasterizer.rasterizerDiscardEnable = vk::False;
+    rasterizer.polygonMode = vk::PolygonMode::eFill;
+    rasterizer.cullMode = vk::CullModeFlagBits::eBack;
+    rasterizer.frontFace = vk::FrontFace::eClockwise;
+    rasterizer.depthBiasEnable = vk::False;
+    rasterizer.lineWidth = 1.0f;
+
+    vk::PipelineMultisampleStateCreateInfo multisampling {};
+    multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+    multisampling.sampleShadingEnable = vk::False;
+
+    vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
+    colorBlendAttachment.blendEnable = vk::True;
+    colorBlendAttachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+    colorBlendAttachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+    colorBlendAttachment.colorBlendOp = vk::BlendOp::eAdd;
+    colorBlendAttachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+    colorBlendAttachment.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+    colorBlendAttachment.alphaBlendOp = vk::BlendOp::eAdd;
+
+    vk::PipelineColorBlendStateCreateInfo colorBlending {};
+    colorBlending.logicOpEnable = vk::False;
+    colorBlending.attachmentCount = 1;
+    colorBlending.pAttachments = &colorBlendAttachment;
+
+    vk::PipelineLayoutCreateInfo pipelineLayoutInfo {};
+    pipelineLayoutInfo.setLayoutCount = 0;
+    pipelineLayoutInfo.pushConstantRangeCount = 0;
+    pipeline_layout = {logical_device, pipelineLayoutInfo};
+
+    vk::PipelineRenderingCreateInfo pipelineRenderingInfo {};
+    pipelineRenderingInfo.colorAttachmentCount = 1;
+    pipelineRenderingInfo.pColorAttachmentFormats = &swap_chain_image_format;
+
+    vk::GraphicsPipelineCreateInfo pipelineInfo {};
+    pipelineInfo.pNext = &pipelineRenderingInfo;
+    pipelineInfo.stageCount = 2;
+    pipelineInfo.pStages = shaderStages;
+    pipelineInfo.pVertexInputState = &vertexInputInfo;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewPort;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = pipeline_layout;
+    pipelineInfo.renderPass = nullptr;
+
+    graphics_pipeline = {logical_device, nullptr, pipelineInfo};
 }
 
-void WEngine::main_loop()
+void WEngine::main_loop() const
 {
     while (!glfwWindowShouldClose(window))
     {
@@ -433,7 +506,7 @@ void WEngine::main_loop()
     }
 }
 
-void WEngine::cleanup()
+void WEngine::cleanup() const
 {
     glfwDestroyWindow(window);
 
