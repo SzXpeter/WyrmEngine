@@ -2,7 +2,7 @@ function (add_slang_shader_target TARGET)
     cmake_parse_arguments("SHADER" "" "" "SOURCES" ${ARGN})
 
     set(SHADERS_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-    set(ENTRY_POINTS -entry VertexMain -entry FragmentMain)
+    set(ENTRY_POINTS -entry vertMain -entry fragMain)
 
     add_custom_command(
             OUTPUT ${SHADERS_DIR}

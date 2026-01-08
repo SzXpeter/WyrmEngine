@@ -72,7 +72,7 @@ void WEngine::init_window()
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-    window = glfwCreateWindow(width, height, "Vulkan", nullptr, nullptr);
+    window = glfwCreateWindow(static_cast<int>(width), static_cast<int>(height), "Vulkan", nullptr, nullptr);
 }
 
 void WEngine::init_vulkan()
@@ -87,6 +87,7 @@ void WEngine::init_vulkan()
     create_graphics_pipeline();
     create_command_pool();
     create_command_buffer();
+    create_sync_object();
 }
 
 std::vector<const char*> getRequiredLayers(const vk::raii::Context& context);
@@ -111,33 +112,6 @@ void WEngine::create_vulkan_instance()
     instanceCreateInfo.ppEnabledExtensionNames = requiredExtensions.data();
 
     instance = vk::raii::Instance(context, instanceCreateInfo);
-}
-
-std::vector<const char*> getRequiredExtensions(const vk::raii::Context& context)
-{
-    uint32_t glfwExtensionCount = 0;
-    auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-    std::vector requiredExtensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
-    if (enableValidationLayers)
-        requiredExtensions.push_back(vk::EXTDebugUtilsExtensionName);
-
-    std::stringstream unsupportedExtensions {};
-    auto extensionProperties = context.enumerateInstanceExtensionProperties();
-
-    for (auto requiredExtension : requiredExtensions)
-    {
-        if (std::ranges::none_of(extensionProperties,
-                                 [glfwExtension = requiredExtension](auto const& extensionProperty)
-                                 { return strcmp(extensionProperty.extensionName, glfwExtension) == 0; }))
-        {
-            unsupportedExtensions << " - " << requiredExtension << "\n";
-        }
-    }
-    if (!unsupportedExtensions.str().empty())
-        throw std::runtime_error("Unsupported GLFW extensions:\n" + unsupportedExtensions.str());
-
-    return requiredExtensions;
 }
 
 std::vector<const char*> getRequiredLayers(const vk::raii::Context& context)
@@ -185,6 +159,33 @@ void WEngine::setup_debug_messenger()
     debug_messenger = instance.createDebugUtilsMessengerEXT(debugCreateInfo);
 }
 
+std::vector<const char*> getRequiredExtensions(const vk::raii::Context& context)
+{
+    uint32_t glfwExtensionCount = 0;
+    auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+    std::vector requiredExtensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+    if (enableValidationLayers)
+        requiredExtensions.push_back(vk::EXTDebugUtilsExtensionName);
+
+    std::stringstream unsupportedExtensions {};
+    auto extensionProperties = context.enumerateInstanceExtensionProperties();
+
+    for (auto requiredExtension : requiredExtensions)
+    {
+        if (std::ranges::none_of(extensionProperties,
+                                 [glfwExtension = requiredExtension](auto const& extensionProperty)
+                                 { return strcmp(extensionProperty.extensionName, glfwExtension) == 0; }))
+        {
+            unsupportedExtensions << " - " << requiredExtension << "\n";
+        }
+    }
+    if (!unsupportedExtensions.str().empty())
+        throw std::runtime_error("Unsupported GLFW extensions:\n" + unsupportedExtensions.str());
+
+    return requiredExtensions;
+}
+
 void WEngine::create_surface()
 {
     VkSurfaceKHR _surface;
@@ -201,7 +202,7 @@ void WEngine::pick_physical_device()
     const auto device_it = std::ranges::find_if(physicalDevices,
         [&](const auto& physicalDevice) {
             auto queueFamilies = physicalDevice.getQueueFamilyProperties();
-            bool isSuitable = physicalDevice.getProperties().apiVersion >= VK_API_VERSION_1_3;
+            bool isSuitable = physicalDevice.getProperties().apiVersion >= VK_API_VERSION_1_4;
 
             const auto queueFamilyProperty_it = std::ranges::find_if(queueFamilies,
                 [](const auto& qfp) {
@@ -211,7 +212,7 @@ void WEngine::pick_physical_device()
 
             auto extensions = physicalDevice.enumerateDeviceExtensionProperties();
             bool found = true;
-            for (const auto& dExtension : deviceExtensions)
+            for (const auto& dExtension : device_extensions)
             {
                 auto extension_it = std::ranges::find_if(extensions, [dExtension](const auto& ext){return strcmp(ext.extensionName, dExtension) == 0; });
                 found = found && (extension_it != extensions.end());
@@ -237,26 +238,28 @@ void WEngine::create_logical_device()
         [](const auto& qfp) {
             return (qfp.queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0);
         });
-
     uint32_t graphicsIndex = std::ranges::distance(queueFamilyProperties.begin(), graphicsQueueFamilyProperty);
     uint32_t presentationIndex = getPresentationQFPIndex(physical_device, surface, graphicsIndex);
     bool sameQFP = graphicsIndex == presentationIndex;
 
     vk::PhysicalDeviceFeatures2 physicalDeviceFeatures2 {};
-
     vk::PhysicalDeviceVulkan11Features vulkan11Features {};
-    vulkan11Features.pNext = &physicalDeviceFeatures2;
+    vk::PhysicalDeviceVulkan13Features vulkan13Features{};
+    vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicStateFeatures {};
+
     vulkan11Features.shaderDrawParameters = true;
 
-    vk::PhysicalDeviceVulkan13Features vulkan13Features{};
-    vulkan13Features.pNext = &vulkan11Features;
     vulkan13Features.dynamicRendering = true;
+    vulkan13Features.synchronization2 = true;
 
-    vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicStateFeatures {};
-    extendedDynamicStateFeatures.pNext = &vulkan13Features;
     extendedDynamicStateFeatures.extendedDynamicState = true;
 
-    std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
+    physicalDeviceFeatures2.pNext = &vulkan11Features;
+    vulkan11Features.pNext = &vulkan13Features;
+    vulkan13Features.pNext = &extendedDynamicStateFeatures;
+    extendedDynamicStateFeatures.pNext = nullptr;
+
+    std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos {};
     float queuePriority = .5f;
 
     vk::DeviceQueueCreateInfo graphicsQueueCreateInfo {};
@@ -277,11 +280,11 @@ void WEngine::create_logical_device()
     }
 
     vk::DeviceCreateInfo deviceCreateInfo {};
-    deviceCreateInfo.pNext = &extendedDynamicStateFeatures;
+    deviceCreateInfo.pNext = &physicalDeviceFeatures2;
     deviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
     deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
-    deviceCreateInfo.enabledExtensionCount =  static_cast<uint32_t>(deviceExtensions.size());
-    deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
+    deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(device_extensions.size());
+    deviceCreateInfo.ppEnabledExtensionNames = device_extensions.data();
 
     logical_device = vk::raii::Device(physical_device, deviceCreateInfo);
 
@@ -422,12 +425,12 @@ void WEngine::create_graphics_pipeline()
     vk::PipelineShaderStageCreateInfo vertexShaderInfo {};
     vertexShaderInfo.stage = vk::ShaderStageFlagBits::eVertex;
     vertexShaderInfo.module = shaderModule;
-    vertexShaderInfo.pName = "VertexMain";
+    vertexShaderInfo.pName = "vertMain";
 
     vk::PipelineShaderStageCreateInfo fragmentShaderInfo {};
     fragmentShaderInfo.stage = vk::ShaderStageFlagBits::eFragment;
     fragmentShaderInfo.module = shaderModule;
-    fragmentShaderInfo.pName = "FragmentMain";
+    fragmentShaderInfo.pName = "fragMain";
 
     vk::PipelineShaderStageCreateInfo shaderStages[] = {vertexShaderInfo, fragmentShaderInfo};
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo {};
@@ -461,13 +464,14 @@ void WEngine::create_graphics_pipeline()
     multisampling.sampleShadingEnable = vk::False;
 
     vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
-    colorBlendAttachment.blendEnable = vk::True;
+    colorBlendAttachment.blendEnable = vk::False;
     colorBlendAttachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
     colorBlendAttachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
     colorBlendAttachment.colorBlendOp = vk::BlendOp::eAdd;
     colorBlendAttachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;
     colorBlendAttachment.dstAlphaBlendFactor = vk::BlendFactor::eZero;
     colorBlendAttachment.alphaBlendOp = vk::BlendOp::eAdd;
+    colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
 
     vk::PipelineColorBlendStateCreateInfo colorBlending {};
     colorBlending.logicOpEnable = vk::False;
@@ -532,7 +536,7 @@ void WEngine::record_command_buffer(uint32_t imageIndex) const
         vk::PipelineStageFlagBits2::eColorAttachmentOutput
     );
 
-    vk::ClearValue clearColor = vk::ClearColorValue(1.0f, 0.0f, 1.0f, 1.0f);
+    vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
     vk::RenderingAttachmentInfo attachmentInfo {};
     attachmentInfo.imageView = swap_chain_image_views[imageIndex];
     attachmentInfo.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
@@ -618,14 +622,14 @@ void WEngine::main_loop() const
 
 void WEngine::draw_frame() const
 {
-    auto fenceResult = logical_device.waitForFences(*draw_fence, vk::True, UINT64_MAX);
+    graphics_queue.waitIdle();
 
     auto [result, imageIndex] = swap_chain.acquireNextImage(UINT64_MAX, *present_complete_semaphore, nullptr);
 
     record_command_buffer(imageIndex);
     logical_device.resetFences(*draw_fence);
 
-    vk::PipelineStageFlags waitDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+    constexpr vk::PipelineStageFlags waitDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
     vk::SubmitInfo submitInfo {};
     submitInfo.waitSemaphoreCount = 1;
     submitInfo.pWaitSemaphores = &*present_complete_semaphore;
@@ -644,7 +648,7 @@ void WEngine::draw_frame() const
     presentInfo.pSwapchains = &*swap_chain;
     presentInfo.pImageIndices = &imageIndex;
 
-    result = present_queue.presentKHR(presentInfo);
+    result = graphics_queue.presentKHR(presentInfo);
 }
 
 void WEngine::cleanup() const

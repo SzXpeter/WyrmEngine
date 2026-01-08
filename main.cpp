@@ -9,7 +9,7 @@
 int main()
 {
     WEngine engine;
-    engine.SetWindowSize(1280, 720);
+    engine.SetWindowSize(1920, 1080);
 
     try
     {
