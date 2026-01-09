@@ -445,46 +445,24 @@ void WEngine::create_command_buffer()
     vk::CommandBufferAllocateInfo allocateInfo {};
     allocateInfo.commandPool = command_pool;
     allocateInfo.level = vk::CommandBufferLevel::ePrimary;
-    allocateInfo.commandBufferCount = 1;
+    allocateInfo.commandBufferCount = MAX_FRAMES_IN_FLIGHT;
 
-    command_buffer = std::move(vk::raii::CommandBuffers(logical_device, allocateInfo).front());
-}
-
-void WEngine::transition_image_layout(uint32_t imageIndex, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, vk::AccessFlags2 srcAccessMask, vk::AccessFlags2 dstAccessMask, vk::PipelineStageFlags2 srcStageMask, vk::PipelineStageFlags2 dstStageMask) const
-{
-    vk::ImageSubresourceRange imgSubresourceRange {};
-    imgSubresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-    imgSubresourceRange.baseMipLevel = 0;
-    imgSubresourceRange.levelCount = 1;
-    imgSubresourceRange.baseArrayLayer = 0;
-    imgSubresourceRange.layerCount = 1;
-
-    vk::ImageMemoryBarrier2 barrier {};
-    barrier.srcStageMask = srcStageMask;
-    barrier.srcAccessMask = srcAccessMask;
-    barrier.dstStageMask = dstStageMask;
-    barrier.dstAccessMask = dstAccessMask;
-    barrier.oldLayout = oldLayout;
-    barrier.newLayout = newLayout;
-    barrier.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
-    barrier.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
-    barrier.image = swap_chain_images[imageIndex];
-    barrier.subresourceRange = imgSubresourceRange;
-
-    vk::DependencyInfo dependencyInfo {};
-    dependencyInfo.dependencyFlags = {};
-    dependencyInfo.imageMemoryBarrierCount = 1;
-    dependencyInfo.pImageMemoryBarriers = &barrier;
-
-    command_buffer.pipelineBarrier2(dependencyInfo);
+    command_buffers = vk::raii::CommandBuffers(logical_device, allocateInfo);
 }
 
 void WEngine::create_sync_object()
 {
-    present_complete_semaphore = vk::raii::Semaphore(logical_device, vk::SemaphoreCreateInfo());
-    render_finished_semaphore = vk::raii::Semaphore(logical_device, vk::SemaphoreCreateInfo());
+    assert(present_complete_semaphores.empty() && render_finished_semaphores.empty() && in_flight_fences.empty());
+
+    for (size_t i = 0; i < swap_chain_images.size(); i++)
+        render_finished_semaphores.emplace_back(logical_device, vk::SemaphoreCreateInfo());
 
     vk::FenceCreateInfo fenceInfo {};
     fenceInfo.flags = vk::FenceCreateFlagBits::eSignaled;
-    draw_fence = vk::raii::Fence(logical_device, fenceInfo);
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        present_complete_semaphores.emplace_back(logical_device, vk::SemaphoreCreateInfo());
+        in_flight_fences.emplace_back(logical_device, fenceInfo);
+    }
 }

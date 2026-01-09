@@ -55,11 +55,14 @@ private:
     vk::raii::PipelineLayout pipeline_layout = nullptr;
 
     vk::raii::CommandPool command_pool = nullptr;
-    vk::raii::CommandBuffer command_buffer = nullptr;
+    std::vector<vk::raii::CommandBuffer> command_buffers;
 
-    vk::raii::Semaphore present_complete_semaphore = nullptr;
-    vk::raii::Semaphore render_finished_semaphore = nullptr;
-    vk::raii::Fence draw_fence = nullptr;
+    std::vector<vk::raii::Semaphore> present_complete_semaphores;
+    std::vector<vk::raii::Semaphore> render_finished_semaphores;
+    std::vector<vk::raii::Fence> in_flight_fences;
+
+    uint32_t frame_index = 0;
+    static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
     vk::raii::DebugUtilsMessengerEXT debug_messenger = nullptr;
 
@@ -76,12 +79,12 @@ private:
     void create_graphics_pipeline();
     void create_command_pool();
     void create_command_buffer();
-    void transition_image_layout(uint32_t imageIndex, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, vk::AccessFlags2 srcAccessMask, vk::AccessFlags2 dstAccessMask, vk::PipelineStageFlags2 srcStageMask, vk::PipelineStageFlags2 dstStageMask) const;
     void create_sync_object();
 
-    void main_loop() const;
-    void draw_frame() const;
+    void main_loop();
+    void draw_frame();
     void record_command_buffer(uint32_t imageIndex) const;
+    void transition_image_layout(uint32_t imageIndex, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, vk::AccessFlags2 srcAccessMask, vk::AccessFlags2 dstAccessMask, vk::PipelineStageFlags2 srcStageMask, vk::PipelineStageFlags2 dstStageMask) const;
 
     void cleanup() const;
 
