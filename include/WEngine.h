@@ -1,15 +1,22 @@
 //
 // Created by pheen on 02/01/2026.
 //
-
-#ifndef WYRMENGINE_WENGINE_H
-#define WYRMENGINE_WENGINE_H
+#pragma once
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
 #include <vulkan/vulkan_raii.hpp>
+
+#ifdef NDEBUG
+static constexpr bool enableValidationLayers = false;
+#else
+static constexpr bool enableValidationLayers = true;
+const std::vector<const char*> validationLayers = {
+    "VK_LAYER_KHRONOS_validation"
+};
+#endif
 
 class WEngine
 {
@@ -69,12 +76,12 @@ private:
     void create_graphics_pipeline();
     void create_command_pool();
     void create_command_buffer();
-    void record_command_buffer(uint32_t imageIndex) const;
     void transition_image_layout(uint32_t imageIndex, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, vk::AccessFlags2 srcAccessMask, vk::AccessFlags2 dstAccessMask, vk::PipelineStageFlags2 srcStageMask, vk::PipelineStageFlags2 dstStageMask) const;
     void create_sync_object();
 
     void main_loop() const;
     void draw_frame() const;
+    void record_command_buffer(uint32_t imageIndex) const;
 
     void cleanup() const;
 
@@ -84,5 +91,3 @@ private:
 
     static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void*);
 };
-
-#endif //WYRMENGINE_WENGINE_H
