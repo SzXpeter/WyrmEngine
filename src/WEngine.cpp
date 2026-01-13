@@ -60,12 +60,11 @@ void WEngine::init_window()
     glfwInit();
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     window = glfwCreateWindow(static_cast<int>(width), static_cast<int>(height), "Vulkan", nullptr, nullptr);
+    glfwSetWindowUserPointer(window, this);
+    glfwSetFramebufferSizeCallback(window, frame_buffer_resized_callback);
 }
-
-
 
 void WEngine::main_loop()
 {
@@ -85,6 +84,20 @@ void WEngine::draw_frame()
     logical_device.resetFences(*in_flight_fences[frame_index]);
 
     auto [result, imageIndex] = swap_chain.acquireNextImage(UINT64_MAX, *present_complete_semaphores[frame_index], nullptr);
+
+    switch (result)
+    {
+        case vk::Result::eSuccess:
+        case vk::Result::eSuboptimalKHR:
+            break;
+
+        case vk::Result::eErrorOutOfDateKHR:
+            recreate_swap_chain();
+            break;
+
+        default:
+            throw std::runtime_error("failed to acquire swap chain image");
+    }
 
     command_buffers[frame_index].reset();
     record_command_buffer(imageIndex);
@@ -109,14 +122,23 @@ void WEngine::draw_frame()
     presentInfo.pImageIndices = &imageIndex;
 
     result = graphics_queue.presentKHR(presentInfo);
+    if (frame_buffer_resized)
+    {
+        frame_buffer_resized = false;
+        recreate_swap_chain();
+    }
     switch (result)
     {
+        case vk::Result::eErrorOutOfDateKHR:
         case vk::Result::eSuboptimalKHR:
-            std::cout << "vk::Queue::presentKHR returned vk::Result::eSuboptimalKHR!\n";
+            recreate_swap_chain();
             break;
+
         case vk::Result::eSuccess:
-        default:
             break;
+
+        default:
+            throw std::runtime_error("failed to present swap chain image");
     }
 
     frame_index = (frame_index + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -198,15 +220,22 @@ void WEngine::transition_image_layout(uint32_t imageIndex, vk::ImageLayout oldLa
     command_buffers[frame_index].pipelineBarrier2(dependencyInfo);
 }
 
-void WEngine::cleanup() const
+void WEngine::cleanup()
 {
-    glfwDestroyWindow(window);
+    destroy_vulkan();
 
+    glfwDestroyWindow(window);
     glfwTerminate();
 }
 
+void WEngine::frame_buffer_resized_callback(GLFWwindow* window, int width, int height)
+{
+    const auto app = static_cast<WEngine*>(glfwGetWindowUserPointer(window));
+    app->frame_buffer_resized = true;
+}
+
 vk::Bool32 WEngine::debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
-    vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT *pCallbackData, void *)
+                                  vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT *pCallbackData, void *)
 {
     std::cerr << to_string(severity) << " validation layer: type " << to_string(type) << " msg: " << pCallbackData->pMessage << std::endl;
 

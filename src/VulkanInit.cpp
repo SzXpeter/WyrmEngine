@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "WEngine.h"
 
 #include <sstream>
@@ -190,7 +192,7 @@ void WEngine::create_logical_device()
     float queuePriority = .5f;
 
     vk::DeviceQueueCreateInfo graphicsQueueCreateInfo {};
-    graphicsQueueCreateInfo.queueFamilyIndex = graphics_queue_index = graphicsIndex;
+    graphicsQueueCreateInfo.queueFamilyIndex = queue_index = graphicsIndex;
     graphicsQueueCreateInfo.queueCount = 1;
     graphicsQueueCreateInfo.pQueuePriorities = &queuePriority;
 
@@ -435,7 +437,7 @@ void WEngine::create_command_pool()
 {
     vk::CommandPoolCreateInfo poolInfo {};
     poolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
-    poolInfo.queueFamilyIndex = graphics_queue_index;
+    poolInfo.queueFamilyIndex = queue_index;
 
     command_pool = {logical_device, poolInfo};
 }
@@ -465,4 +467,54 @@ void WEngine::create_sync_object()
         present_complete_semaphores.emplace_back(logical_device, vk::SemaphoreCreateInfo());
         in_flight_fences.emplace_back(logical_device, fenceInfo);
     }
+}
+
+void WEngine::cleanup_swap_chain()
+{
+    logical_device.waitIdle();
+
+    swap_chain_image_views.clear();
+    swap_chain = nullptr;
+}
+
+void WEngine::recreate_swap_chain()
+{
+    int _width = 0, _height = 0;
+    glfwGetWindowSize(window, &_width, &_height);
+    while (_width == 0 || _height == 0)
+    {
+        glfwGetFramebufferSize(window, &_width, &_height);
+        glfwWaitEvents();
+    }
+
+    cleanup_swap_chain();
+
+    create_swap_chain();
+    create_image_views();
+}
+
+/* This is need for correct destruction order on wayland */
+void WEngine::destroy_vulkan()
+{
+    cleanup_swap_chain();
+
+    in_flight_fences.clear();
+    render_finished_semaphores.clear();
+    present_complete_semaphores.clear();
+
+    command_buffers.clear();
+    command_pool = nullptr;
+
+    pipeline_layout = nullptr;
+    graphics_pipeline = nullptr;
+
+    graphics_queue = nullptr;
+    present_queue = nullptr;
+
+    logical_device = nullptr;
+    physical_device = nullptr;
+
+    surface = nullptr;
+    debug_messenger = nullptr;
+    instance = nullptr;
 }
