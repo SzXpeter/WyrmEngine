@@ -21,6 +21,7 @@ void WEngine::init_vulkan()
 
 std::vector<const char*> getRequiredLayers(const vk::raii::Context& context);
 std::vector<const char*> getRequiredExtensions(const vk::raii::Context& context);
+/* The instance is the connection between the application and the Vulkan library */
 void WEngine::create_vulkan_instance()
 {
     vk::ApplicationInfo appInfo {};
@@ -43,6 +44,8 @@ void WEngine::create_vulkan_instance()
     instance = vk::raii::Instance(context, instanceCreateInfo);
 }
 
+/* Layers are optional components that augment the Vulkan system
+ * They can intercept, evaluate and modify existing Vulkan functions */
 std::vector<const char*> getRequiredLayers(const vk::raii::Context& context)
 {
     std::vector<char const*> requiredLayers;
@@ -63,31 +66,8 @@ std::vector<const char*> getRequiredLayers(const vk::raii::Context& context)
     return requiredLayers;
 }
 
-void WEngine::setup_debug_messenger()
-{
-    // ReSharper disable CppDFAUnreachableCode
-    if constexpr (!enableValidationLayers) return;
-    // ReSharper restore CppDFAUnreachableCode
-
-    constexpr vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(
-        vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
-        vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-        vk::DebugUtilsMessageSeverityFlagBitsEXT::eError
-    );
-    constexpr vk::DebugUtilsMessageTypeFlagsEXT messageTypeFlags(
-        vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-        vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
-        vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation
-    );
-
-    vk::DebugUtilsMessengerCreateInfoEXT debugCreateInfo {};
-    debugCreateInfo.messageSeverity = severityFlags;
-    debugCreateInfo.messageType = messageTypeFlags;
-    debugCreateInfo.pfnUserCallback = &debugCallback;
-
-    debug_messenger = instance.createDebugUtilsMessengerEXT(debugCreateInfo);
-}
-
+/* Extensions have the ability to add new functionality
+ * They may define new Vulkan functions, enums, structs, or feature bits */
 std::vector<const char*> getRequiredExtensions(const vk::raii::Context& context)
 {
     uint32_t glfwExtensionCount = 0;
@@ -115,6 +95,33 @@ std::vector<const char*> getRequiredExtensions(const vk::raii::Context& context)
     return requiredExtensions;
 }
 
+void WEngine::setup_debug_messenger()
+{
+    // ReSharper disable CppDFAUnreachableCode
+    if constexpr (!enableValidationLayers) return;
+    // ReSharper restore CppDFAUnreachableCode
+
+    constexpr vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(
+        vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
+        vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+        vk::DebugUtilsMessageSeverityFlagBitsEXT::eError
+    );
+    constexpr vk::DebugUtilsMessageTypeFlagsEXT messageTypeFlags(
+        vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+        vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
+        vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation
+    );
+
+    vk::DebugUtilsMessengerCreateInfoEXT debugCreateInfo {};
+    debugCreateInfo.messageSeverity = severityFlags;
+    debugCreateInfo.messageType = messageTypeFlags;
+    debugCreateInfo.pfnUserCallback = &debugCallback;
+
+    debug_messenger = instance.createDebugUtilsMessengerEXT(debugCreateInfo);
+}
+
+/* VkSurfaceKHR represents an abstract type of surface to present rendered images to
+ * This surface is backed by glfw in this program */
 void WEngine::create_surface()
 {
     VkSurfaceKHR _surface;
@@ -124,6 +131,8 @@ void WEngine::create_surface()
     surface = vk::raii::SurfaceKHR(instance, _surface);
 }
 
+/* A “Queue Family” just describes a set of VkQueues that have common properties and support the same functionality,
+ * as advertised in VkQueueFamilyProperties */
 void WEngine::pick_physical_device()
 {
     auto physicalDevices = instance.enumeratePhysicalDevices();
@@ -159,6 +168,9 @@ void WEngine::pick_physical_device()
 }
 
 uint32_t getPresentationQFPIndex(const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::SurfaceKHR& surface, uint32_t& graphicsIndex);
+/* A logical device is used to interface the physical device or smtn idk
+ * The creation process describes the features we want to use.
+ * We also need to specify which queues to create now that we’ve queried which queue families are available */
 void WEngine::create_logical_device()
 {
     auto queueFamilyProperties = physical_device.getQueueFamilyProperties();
@@ -169,7 +181,6 @@ void WEngine::create_logical_device()
         });
     uint32_t graphicsIndex = std::ranges::distance(queueFamilyProperties.begin(), graphicsQueueFamilyProperty);
     uint32_t presentationIndex = getPresentationQFPIndex(physical_device, surface, graphicsIndex);
-    bool sameQFP = graphicsIndex == presentationIndex;
 
     vk::PhysicalDeviceFeatures2 physicalDeviceFeatures2 {};
     vk::PhysicalDeviceVulkan11Features vulkan11Features {};
@@ -198,7 +209,7 @@ void WEngine::create_logical_device()
 
     queueCreateInfos.push_back(graphicsQueueCreateInfo);
 
-    if (!sameQFP)
+    if (graphicsIndex != presentationIndex)
     {
         vk::DeviceQueueCreateInfo presentQueueCreateInfo {};
         presentQueueCreateInfo.queueFamilyIndex = presentationIndex;
@@ -242,7 +253,7 @@ uint32_t getPresentationQFPIndex(const vk::raii::PhysicalDevice& physicalDevice,
         }
         if ( presentationIndex == queueFamilyProperties.size() )
         {
-            // there's nothing like a single family index that supports both graphics and present -> look for another
+            // if there's not a single family index that supports both graphics and present -> look for another
             // family index that supports present
             for ( size_t i = 0; i < queueFamilyProperties.size(); i++ )
             {
@@ -254,7 +265,7 @@ uint32_t getPresentationQFPIndex(const vk::raii::PhysicalDevice& physicalDevice,
             }
         }
     }
-    if ( ( graphicsIndex == queueFamilyProperties.size() ) || ( presentationIndex == queueFamilyProperties.size() ) )
+    if ( graphicsIndex == queueFamilyProperties.size() || presentationIndex == queueFamilyProperties.size() )
     {
         throw std::runtime_error( "Could not find a queue for graphics or present -> terminating" );
     }
@@ -266,6 +277,8 @@ vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormat
 vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities, GLFWwindow* window);
 uint32_t chooseSwapMinImageCount(const vk::SurfaceCapabilitiesKHR& swapSurfaceCapabilities);
 vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
+/* The swap chain is essentially a queue of images that are waiting to be presented to the screen
+ * The general purpose of the swap chain is to synchronize the presentation of images with the refresh rate of the screen */
 void WEngine::create_swap_chain()
 {
     auto swapSurfaceCapabilities = physical_device.getSurfaceCapabilitiesKHR(*surface);
@@ -331,6 +344,7 @@ vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& 
     return vk::PresentModeKHR::eFifo;
 }
 
+/* An image view discribes how to access the image and which part of the image to access */
 void WEngine::create_image_views()
 {
     swap_chain_image_views.clear();
@@ -347,6 +361,8 @@ void WEngine::create_image_views()
     }
 }
 
+/* The graphics pipeline is the sequence of operations that take the vertices and textures
+ * of your meshes all the way to the pixels in the render targets */
 void WEngine::create_graphics_pipeline()
 {
     auto shaderModule = CreateShaderModule(ReadShaderFile("src/shaders/shader.spv"));
@@ -433,6 +449,7 @@ void WEngine::create_graphics_pipeline()
     graphics_pipeline = {logical_device, nullptr, pipelineInfo};
 }
 
+/* Command pools manage the memory that is used to store the buffers and command buffers are allocated from them */
 void WEngine::create_command_pool()
 {
     vk::CommandPoolCreateInfo poolInfo {};
@@ -442,6 +459,8 @@ void WEngine::create_command_pool()
     command_pool = {logical_device, poolInfo};
 }
 
+/* You have to record all the operations you want to perform in command buffer objects
+ * it is more efficient to process the commands all together */
 void WEngine::create_command_buffer()
 {
     vk::CommandBufferAllocateInfo allocateInfo {};
@@ -452,6 +471,7 @@ void WEngine::create_command_buffer()
     command_buffers = vk::raii::CommandBuffers(logical_device, allocateInfo);
 }
 
+/* These are used to keep the gpu in sync with itself and with the cpu */
 void WEngine::create_sync_object()
 {
     assert(present_complete_semaphores.empty() && render_finished_semaphores.empty() && in_flight_fences.empty());
@@ -477,6 +497,7 @@ void WEngine::cleanup_swap_chain()
     swap_chain = nullptr;
 }
 
+/* This is triggered if the window is resized or minimized */
 void WEngine::recreate_swap_chain()
 {
     int _width = 0, _height = 0;
@@ -493,7 +514,7 @@ void WEngine::recreate_swap_chain()
     create_image_views();
 }
 
-/* This is need for correct destruction order on wayland */
+/* This is needed for correct destruction on wayland because the ownership works differently (the instance owns the window object) */
 void WEngine::destroy_vulkan()
 {
     cleanup_swap_chain();
