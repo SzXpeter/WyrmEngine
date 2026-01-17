@@ -11,7 +11,7 @@ find_package(Vulkan REQUIRED)
 #find_package(KTX REQUIRED)
 #find_package(nlohmann_json REQUIRED)
 #find_package(tinygltf REQUIRED)
-#find_package(glm REQUIRED)
+find_package(glm REQUIRED)
 find_package(glfw3 3.4 REQUIRED)
 
 add_executable(${PROJECT_NAME} main.cpp)
@@ -25,6 +25,6 @@ target_link_libraries(${PROJECT_NAME}
 #    KTX::ktx
 #    nlohmann_json::nlohmann_json
 #    tinygltf::tinygltf
-#    glm::glm
+    glm::glm
     glfw
 )
