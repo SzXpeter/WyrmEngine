@@ -44,9 +44,10 @@ std::vector<char> WEngine::ReadShaderFile(const std::string &filename)
 
 vk::raii::ShaderModule WEngine::CreateShaderModule(const std::vector<char>& code)
 {
-    vk::ShaderModuleCreateInfo shaderModuleCI {};
-    shaderModuleCI.codeSize = code.size() * sizeof(char);
-    shaderModuleCI.pCode = reinterpret_cast<const uint32_t*>(code.data());
+    vk::ShaderModuleCreateInfo shaderModuleCI {
+        .codeSize = code.size() * sizeof(char),
+        .pCode = reinterpret_cast<const uint32_t*>(code.data())
+    };
 
     return {logical_device, shaderModuleCI};
 }
@@ -84,7 +85,6 @@ void WEngine::draw_frame()
     logical_device.resetFences(*in_flight_fences[frame_index]);
 
     auto [result, imageIndex] = swap_chain.acquireNextImage(UINT64_MAX, *present_complete_semaphores[frame_index], nullptr);
-
     switch (result)
     {
         case vk::Result::eSuccess:
@@ -103,24 +103,25 @@ void WEngine::draw_frame()
     record_command_buffer(imageIndex);
 
     constexpr vk::PipelineStageFlags waitDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-    vk::SubmitInfo submitI {};
-    submitI.waitSemaphoreCount = 1;
-    submitI.pWaitSemaphores = &*present_complete_semaphores[frame_index];
-    submitI.pWaitDstStageMask = &waitDstStageMask;
-    submitI.commandBufferCount = 1;
-    submitI.pCommandBuffers = &*command_buffers[frame_index];
-    submitI.signalSemaphoreCount = 1;
-    submitI.pSignalSemaphores = &*render_finished_semaphores[imageIndex];
+    const vk::SubmitInfo submitI {
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &*present_complete_semaphores[frame_index],
+        .pWaitDstStageMask = &waitDstStageMask,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &*command_buffers[frame_index],
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &*render_finished_semaphores[imageIndex]
+    };
 
     graphics_queue.submit(submitI, *in_flight_fences[frame_index]);
 
-    vk::PresentInfoKHR presentI {};
-    presentI.waitSemaphoreCount = 1;
-    presentI.pWaitSemaphores = &*render_finished_semaphores[imageIndex];
-    presentI.swapchainCount = 1;
-    presentI.pSwapchains = &*swap_chain;
-    presentI.pImageIndices = &imageIndex;
-
+    const vk::PresentInfoKHR presentI {
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &*render_finished_semaphores[imageIndex],
+        .swapchainCount = 1,
+        .pSwapchains = &*swap_chain,
+        .pImageIndices = &imageIndex
+    };
     result = graphics_queue.presentKHR(presentI);
     if (frame_buffer_resized)
     {
@@ -157,19 +158,20 @@ void WEngine::record_command_buffer(uint32_t imageIndex) const
         vk::PipelineStageFlagBits2::eColorAttachmentOutput
     );
 
-    vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
-    vk::RenderingAttachmentInfo attachmentI {};
-    attachmentI.imageView = swap_chain_image_views[imageIndex];
-    attachmentI.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
-    attachmentI.loadOp = vk::AttachmentLoadOp::eClear;
-    attachmentI.storeOp = vk::AttachmentStoreOp::eStore;
-    attachmentI.clearValue = clearColor;
-
-    vk::RenderingInfo renderingI {};
-    renderingI.renderArea = {.offset = {0, 0}, .extent = swap_chain_extent};
-    renderingI.layerCount = 1;
-    renderingI.colorAttachmentCount = 1;
-    renderingI.pColorAttachments = &attachmentI;
+    constexpr vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
+    const vk::RenderingAttachmentInfo attachmentI {
+        .imageView = swap_chain_image_views[imageIndex],
+        .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+        .loadOp = vk::AttachmentLoadOp::eClear,
+        .storeOp = vk::AttachmentStoreOp::eStore,
+        .clearValue = clearColor
+    };
+    const vk::RenderingInfo renderingI {
+        .renderArea = {.offset = {0, 0}, .extent = swap_chain_extent},
+        .layerCount = 1,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &attachmentI,
+    };
 
     command_buffers[frame_index].beginRendering(renderingI);
     command_buffers[frame_index].bindPipeline(vk::PipelineBindPoint::eGraphics, graphics_pipeline);
@@ -193,29 +195,30 @@ void WEngine::record_command_buffer(uint32_t imageIndex) const
 
 void WEngine::transition_image_layout(uint32_t imageIndex, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, vk::AccessFlags2 srcAccessMask, vk::AccessFlags2 dstAccessMask, vk::PipelineStageFlags2 srcStageMask, vk::PipelineStageFlags2 dstStageMask) const
 {
-    vk::ImageSubresourceRange imgSubresourceRange {};
-    imgSubresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-    imgSubresourceRange.baseMipLevel = 0;
-    imgSubresourceRange.levelCount = 1;
-    imgSubresourceRange.baseArrayLayer = 0;
-    imgSubresourceRange.layerCount = 1;
-
-    vk::ImageMemoryBarrier2 barrier {};
-    barrier.srcStageMask = srcStageMask;
-    barrier.srcAccessMask = srcAccessMask;
-    barrier.dstStageMask = dstStageMask;
-    barrier.dstAccessMask = dstAccessMask;
-    barrier.oldLayout = oldLayout;
-    barrier.newLayout = newLayout;
-    barrier.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
-    barrier.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
-    barrier.image = swap_chain_images[imageIndex];
-    barrier.subresourceRange = imgSubresourceRange;
-
-    vk::DependencyInfo dependencyI {};
-    dependencyI.dependencyFlags = {};
-    dependencyI.imageMemoryBarrierCount = 1;
-    dependencyI.pImageMemoryBarriers = &barrier;
+    constexpr vk::ImageSubresourceRange imgSubresourceRange {
+        .aspectMask = vk::ImageAspectFlagBits::eColor,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1
+    };
+    const vk::ImageMemoryBarrier2 barrier {
+        .srcStageMask = srcStageMask,
+        .srcAccessMask = srcAccessMask,
+        .dstStageMask = dstStageMask,
+        .dstAccessMask = dstAccessMask,
+        .oldLayout = oldLayout,
+        .newLayout = newLayout,
+        .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
+        .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
+        .image = swap_chain_images[imageIndex],
+        .subresourceRange = imgSubresourceRange
+    };
+    const vk::DependencyInfo dependencyI {
+        .dependencyFlags = {},
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &barrier
+    };
 
     command_buffers[frame_index].pipelineBarrier2(dependencyI);
 }
@@ -234,8 +237,7 @@ void WEngine::frame_buffer_resized_callback(GLFWwindow* window, int width, int h
     app->frame_buffer_resized = true;
 }
 
-vk::Bool32 WEngine::debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
-                                  vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT *pCallbackData, void *)
+vk::Bool32 WEngine::debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT *pCallbackData, void *)
 {
     std::cerr << to_string(severity) << " validation layer: type " << to_string(type) << " msg: " << pCallbackData->pMessage << std::endl;
 
