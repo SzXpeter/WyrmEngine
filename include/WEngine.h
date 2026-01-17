@@ -42,7 +42,7 @@ private:
     vk::raii::SurfaceKHR surface = nullptr;
 
     vk::raii::PhysicalDevice physical_device = nullptr;
-    vk::raii::Device logical_device = nullptr;
+    vk::raii::Device device = nullptr;
 
     uint32_t queue_index = ~0;
     vk::raii::Queue graphics_queue = nullptr;
@@ -56,6 +56,9 @@ private:
 
     vk::raii::PipelineLayout pipeline_layout = nullptr;
     vk::raii::Pipeline graphics_pipeline = nullptr;
+
+    vk::raii::Buffer vertex_buffer = nullptr;
+    vk::raii::DeviceMemory vertex_buffer_memory = nullptr;
 
     vk::raii::CommandPool command_pool = nullptr;
     std::vector<vk::raii::CommandBuffer> command_buffers;
@@ -78,6 +81,7 @@ private:
     void create_swap_chain();
     void create_image_views();
     void create_graphics_pipeline();
+    void create_vertex_buffer();
     void create_command_pool();
     void create_command_buffer();
     void create_sync_object();
@@ -99,7 +103,7 @@ private:
     };
 
     bool frame_buffer_resized = false;
-    static void frame_buffer_resized_callback(GLFWwindow* window, int width, int height);
+    static void frame_buffer_resize_callback(GLFWwindow* window, int width, int height);
 
     static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void*);
 };
@@ -109,16 +113,22 @@ struct Vertex
     glm::vec2 position;
     glm::vec3 color;
 
-    static vk::VertexInputBindingDescription GetBindingDescription()
+    static constexpr vk::VertexInputBindingDescription GetBindingDescription()
     {
         return { 0, sizeof(Vertex), vk::VertexInputRate::eVertex };
     }
 
-    static std::array<vk::VertexInputAttributeDescription, 2> GetAttributeDescriptions()
+    static constexpr std::array<vk::VertexInputAttributeDescription, 2> GetAttributeDescriptions()
     {
         return {
             vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, position)),
-            vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color))
+            vk::VertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color))
         };
     }
+};
+
+const std::vector<Vertex> vertices = {
+    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
 };
