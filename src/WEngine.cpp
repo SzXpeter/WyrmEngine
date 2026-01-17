@@ -44,11 +44,11 @@ std::vector<char> WEngine::ReadShaderFile(const std::string &filename)
 
 vk::raii::ShaderModule WEngine::CreateShaderModule(const std::vector<char>& code)
 {
-    vk::ShaderModuleCreateInfo shaderModuleCreateInfo {};
-    shaderModuleCreateInfo.codeSize = code.size() * sizeof(char);
-    shaderModuleCreateInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+    vk::ShaderModuleCreateInfo shaderModuleCI {};
+    shaderModuleCI.codeSize = code.size() * sizeof(char);
+    shaderModuleCI.pCode = reinterpret_cast<const uint32_t*>(code.data());
 
-    return {logical_device, shaderModuleCreateInfo};
+    return {logical_device, shaderModuleCI};
 }
 
 void WEngine::init_window()
@@ -103,25 +103,25 @@ void WEngine::draw_frame()
     record_command_buffer(imageIndex);
 
     constexpr vk::PipelineStageFlags waitDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-    vk::SubmitInfo submitInfo {};
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &*present_complete_semaphores[frame_index];
-    submitInfo.pWaitDstStageMask = &waitDstStageMask;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &*command_buffers[frame_index];
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &*render_finished_semaphores[imageIndex];
+    vk::SubmitInfo submitI {};
+    submitI.waitSemaphoreCount = 1;
+    submitI.pWaitSemaphores = &*present_complete_semaphores[frame_index];
+    submitI.pWaitDstStageMask = &waitDstStageMask;
+    submitI.commandBufferCount = 1;
+    submitI.pCommandBuffers = &*command_buffers[frame_index];
+    submitI.signalSemaphoreCount = 1;
+    submitI.pSignalSemaphores = &*render_finished_semaphores[imageIndex];
 
-    graphics_queue.submit(submitInfo, *in_flight_fences[frame_index]);
+    graphics_queue.submit(submitI, *in_flight_fences[frame_index]);
 
-    vk::PresentInfoKHR presentInfo {};
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &*render_finished_semaphores[imageIndex];
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = &*swap_chain;
-    presentInfo.pImageIndices = &imageIndex;
+    vk::PresentInfoKHR presentI {};
+    presentI.waitSemaphoreCount = 1;
+    presentI.pWaitSemaphores = &*render_finished_semaphores[imageIndex];
+    presentI.swapchainCount = 1;
+    presentI.pSwapchains = &*swap_chain;
+    presentI.pImageIndices = &imageIndex;
 
-    result = graphics_queue.presentKHR(presentInfo);
+    result = graphics_queue.presentKHR(presentI);
     if (frame_buffer_resized)
     {
         frame_buffer_resized = false;
@@ -158,20 +158,20 @@ void WEngine::record_command_buffer(uint32_t imageIndex) const
     );
 
     vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
-    vk::RenderingAttachmentInfo attachmentInfo {};
-    attachmentInfo.imageView = swap_chain_image_views[imageIndex];
-    attachmentInfo.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
-    attachmentInfo.loadOp = vk::AttachmentLoadOp::eClear;
-    attachmentInfo.storeOp = vk::AttachmentStoreOp::eStore;
-    attachmentInfo.clearValue = clearColor;
+    vk::RenderingAttachmentInfo attachmentI {};
+    attachmentI.imageView = swap_chain_image_views[imageIndex];
+    attachmentI.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+    attachmentI.loadOp = vk::AttachmentLoadOp::eClear;
+    attachmentI.storeOp = vk::AttachmentStoreOp::eStore;
+    attachmentI.clearValue = clearColor;
 
-    vk::RenderingInfo renderingInfo {};
-    renderingInfo.renderArea = {.offset = {0, 0}, .extent = swap_chain_extent};
-    renderingInfo.layerCount = 1;
-    renderingInfo.colorAttachmentCount = 1;
-    renderingInfo.pColorAttachments = &attachmentInfo;
+    vk::RenderingInfo renderingI {};
+    renderingI.renderArea = {.offset = {0, 0}, .extent = swap_chain_extent};
+    renderingI.layerCount = 1;
+    renderingI.colorAttachmentCount = 1;
+    renderingI.pColorAttachments = &attachmentI;
 
-    command_buffers[frame_index].beginRendering(renderingInfo);
+    command_buffers[frame_index].beginRendering(renderingI);
     command_buffers[frame_index].bindPipeline(vk::PipelineBindPoint::eGraphics, graphics_pipeline);
     command_buffers[frame_index].setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swap_chain_extent.width), static_cast<float>(swap_chain_extent.height), 0.0f, 1.0f));
     command_buffers[frame_index].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swap_chain_extent));
@@ -212,12 +212,12 @@ void WEngine::transition_image_layout(uint32_t imageIndex, vk::ImageLayout oldLa
     barrier.image = swap_chain_images[imageIndex];
     barrier.subresourceRange = imgSubresourceRange;
 
-    vk::DependencyInfo dependencyInfo {};
-    dependencyInfo.dependencyFlags = {};
-    dependencyInfo.imageMemoryBarrierCount = 1;
-    dependencyInfo.pImageMemoryBarriers = &barrier;
+    vk::DependencyInfo dependencyI {};
+    dependencyI.dependencyFlags = {};
+    dependencyI.imageMemoryBarrierCount = 1;
+    dependencyI.pImageMemoryBarriers = &barrier;
 
-    command_buffers[frame_index].pipelineBarrier2(dependencyInfo);
+    command_buffers[frame_index].pipelineBarrier2(dependencyI);
 }
 
 void WEngine::cleanup()

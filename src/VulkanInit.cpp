@@ -24,24 +24,24 @@ std::vector<const char*> getRequiredExtensions(const vk::raii::Context& context)
 /* The instance is the connection between the application and the Vulkan library */
 void WEngine::create_vulkan_instance()
 {
-    vk::ApplicationInfo appInfo {};
-    appInfo.pApplicationName = "WEngine";
-    appInfo.applicationVersion = VK_MAKE_VERSION( 1, 0, 0 );
-    appInfo.pEngineName = "No Engine";
-    appInfo.engineVersion = VK_MAKE_VERSION( 1, 0, 0 );
-    appInfo.apiVersion  = vk::ApiVersion14;
+    vk::ApplicationInfo appI {};
+    appI.pApplicationName = "WEngine";
+    appI.applicationVersion = VK_MAKE_VERSION( 1, 0, 0 );
+    appI.pEngineName = "No Engine";
+    appI.engineVersion = VK_MAKE_VERSION( 1, 0, 0 );
+    appI.apiVersion  = vk::ApiVersion14;
 
     const auto requiredLayers = getRequiredLayers(context);
     const auto requiredExtensions = getRequiredExtensions(context);
 
-    vk::InstanceCreateInfo instanceCreateInfo {};
-    instanceCreateInfo.pApplicationInfo = &appInfo;
-    instanceCreateInfo.enabledLayerCount = static_cast<uint32_t>(requiredLayers.size());
-    instanceCreateInfo.ppEnabledLayerNames = requiredLayers.data();
-    instanceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(requiredExtensions.size());
-    instanceCreateInfo.ppEnabledExtensionNames = requiredExtensions.data();
+    vk::InstanceCreateInfo instanceCI {};
+    instanceCI.pApplicationInfo = &appI;
+    instanceCI.enabledLayerCount = static_cast<uint32_t>(requiredLayers.size());
+    instanceCI.ppEnabledLayerNames = requiredLayers.data();
+    instanceCI.enabledExtensionCount = static_cast<uint32_t>(requiredExtensions.size());
+    instanceCI.ppEnabledExtensionNames = requiredExtensions.data();
 
-    instance = vk::raii::Instance(context, instanceCreateInfo);
+    instance = vk::raii::Instance(context, instanceCI);
 }
 
 /* Layers are optional components that augment the Vulkan system
@@ -112,12 +112,12 @@ void WEngine::setup_debug_messenger()
         vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation
     );
 
-    vk::DebugUtilsMessengerCreateInfoEXT debugCreateInfo {};
-    debugCreateInfo.messageSeverity = severityFlags;
-    debugCreateInfo.messageType = messageTypeFlags;
-    debugCreateInfo.pfnUserCallback = &debugCallback;
+    vk::DebugUtilsMessengerCreateInfoEXT debugCI {};
+    debugCI.messageSeverity = severityFlags;
+    debugCI.messageType = messageTypeFlags;
+    debugCI.pfnUserCallback = &debugCallback;
 
-    debug_messenger = instance.createDebugUtilsMessengerEXT(debugCreateInfo);
+    debug_messenger = instance.createDebugUtilsMessengerEXT(debugCI);
 }
 
 /* VkSurfaceKHR represents an abstract type of surface to present rendered images to
@@ -183,15 +183,15 @@ void WEngine::create_logical_device()
     uint32_t presentationIndex = getPresentationQFPIndex(physical_device, surface, graphicsIndex);
 
     vk::PhysicalDeviceFeatures2 physicalDeviceFeatures2 {};
-    vk::PhysicalDeviceVulkan11Features vulkan11Features {};
-    vk::PhysicalDeviceVulkan13Features vulkan13Features{};
-    vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicStateFeatures {};
 
+    vk::PhysicalDeviceVulkan11Features vulkan11Features {};
     vulkan11Features.shaderDrawParameters = true;
 
+    vk::PhysicalDeviceVulkan13Features vulkan13Features{};
     vulkan13Features.dynamicRendering = true;
     vulkan13Features.synchronization2 = true;
 
+    vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicStateFeatures {};
     extendedDynamicStateFeatures.extendedDynamicState = true;
 
     physicalDeviceFeatures2.pNext = &vulkan11Features;
@@ -202,31 +202,31 @@ void WEngine::create_logical_device()
     std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos {};
     float queuePriority = .5f;
 
-    vk::DeviceQueueCreateInfo graphicsQueueCreateInfo {};
-    graphicsQueueCreateInfo.queueFamilyIndex = queue_index = graphicsIndex;
-    graphicsQueueCreateInfo.queueCount = 1;
-    graphicsQueueCreateInfo.pQueuePriorities = &queuePriority;
+    vk::DeviceQueueCreateInfo graphicsQueueCI {};
+    graphicsQueueCI.queueFamilyIndex = queue_index = graphicsIndex;
+    graphicsQueueCI.queueCount = 1;
+    graphicsQueueCI.pQueuePriorities = &queuePriority;
 
-    queueCreateInfos.push_back(graphicsQueueCreateInfo);
+    queueCreateInfos.push_back(graphicsQueueCI);
 
     if (graphicsIndex != presentationIndex)
     {
-        vk::DeviceQueueCreateInfo presentQueueCreateInfo {};
-        presentQueueCreateInfo.queueFamilyIndex = presentationIndex;
-        presentQueueCreateInfo.queueCount = 1;
-        presentQueueCreateInfo.pQueuePriorities = &queuePriority;
+        vk::DeviceQueueCreateInfo presentQueueCI {};
+        presentQueueCI.queueFamilyIndex = presentationIndex;
+        presentQueueCI.queueCount = 1;
+        presentQueueCI.pQueuePriorities = &queuePriority;
 
-        queueCreateInfos.push_back(presentQueueCreateInfo);
+        queueCreateInfos.push_back(presentQueueCI);
     }
 
-    vk::DeviceCreateInfo deviceCreateInfo {};
-    deviceCreateInfo.pNext = &physicalDeviceFeatures2;
-    deviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
-    deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
-    deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(device_extensions.size());
-    deviceCreateInfo.ppEnabledExtensionNames = device_extensions.data();
+    vk::DeviceCreateInfo deviceCI {};
+    deviceCI.pNext = &physicalDeviceFeatures2;
+    deviceCI.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
+    deviceCI.pQueueCreateInfos = queueCreateInfos.data();
+    deviceCI.enabledExtensionCount = static_cast<uint32_t>(device_extensions.size());
+    deviceCI.ppEnabledExtensionNames = device_extensions.data();
 
-    logical_device = vk::raii::Device(physical_device, deviceCreateInfo);
+    logical_device = vk::raii::Device(physical_device, deviceCI);
 
     graphics_queue = logical_device.getQueue(graphicsIndex, 0);
     present_queue = logical_device.getQueue(presentationIndex, 0);
@@ -284,23 +284,23 @@ void WEngine::create_swap_chain()
     auto swapSurfaceCapabilities = physical_device.getSurfaceCapabilitiesKHR(*surface);
     auto swapSurfaceFormat = chooseSwapSurfaceFormat(physical_device.getSurfaceFormatsKHR(*surface));
 
-    vk::SwapchainCreateInfoKHR swapChainCreateInfo {};
-    swapChainCreateInfo.flags = vk::SwapchainCreateFlagsKHR{};
-    swapChainCreateInfo.surface = *surface;
-    swapChainCreateInfo.minImageCount = chooseSwapMinImageCount(swapSurfaceCapabilities);
-    swapChainCreateInfo.imageFormat = swap_chain_image_format = swapSurfaceFormat.format;
-    swapChainCreateInfo.imageColorSpace = swapSurfaceFormat.colorSpace;
-    swapChainCreateInfo.imageExtent = swap_chain_extent = chooseSwapExtent(swapSurfaceCapabilities, window);
-    swapChainCreateInfo.imageArrayLayers = 1;
-    swapChainCreateInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
-    swapChainCreateInfo.imageSharingMode = vk::SharingMode::eExclusive;
-    swapChainCreateInfo.preTransform = swapSurfaceCapabilities.currentTransform;
-    swapChainCreateInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
-    swapChainCreateInfo.presentMode = chooseSwapPresentMode(physical_device.getSurfacePresentModesKHR(*surface));
-    swapChainCreateInfo.clipped = vk::True;
-    swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
+    vk::SwapchainCreateInfoKHR swapChainCI {};
+    swapChainCI.flags = vk::SwapchainCreateFlagsKHR{};
+    swapChainCI.surface = *surface;
+    swapChainCI.minImageCount = chooseSwapMinImageCount(swapSurfaceCapabilities);
+    swapChainCI.imageFormat = swap_chain_image_format = swapSurfaceFormat.format;
+    swapChainCI.imageColorSpace = swapSurfaceFormat.colorSpace;
+    swapChainCI.imageExtent = swap_chain_extent = chooseSwapExtent(swapSurfaceCapabilities, window);
+    swapChainCI.imageArrayLayers = 1;
+    swapChainCI.imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
+    swapChainCI.imageSharingMode = vk::SharingMode::eExclusive;
+    swapChainCI.preTransform = swapSurfaceCapabilities.currentTransform;
+    swapChainCI.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+    swapChainCI.presentMode = chooseSwapPresentMode(physical_device.getSurfacePresentModesKHR(*surface));
+    swapChainCI.clipped = vk::True;
+    swapChainCI.oldSwapchain = VK_NULL_HANDLE;
 
-    swap_chain = logical_device.createSwapchainKHR(swapChainCreateInfo);
+    swap_chain = logical_device.createSwapchainKHR(swapChainCI);
     swap_chain_images = swap_chain.getImages();
 }
 
@@ -349,15 +349,15 @@ void WEngine::create_image_views()
 {
     swap_chain_image_views.clear();
 
-    vk::ImageViewCreateInfo imageViewCreateInfo {};
-    imageViewCreateInfo.viewType = vk::ImageViewType::e2D;
-    imageViewCreateInfo.format = swap_chain_image_format;
-    imageViewCreateInfo.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+    vk::ImageViewCreateInfo imageViewCI {};
+    imageViewCI.viewType = vk::ImageViewType::e2D;
+    imageViewCI.format = swap_chain_image_format;
+    imageViewCI.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
 
     for (auto image : swap_chain_images)
     {
-        imageViewCreateInfo.image = image;
-        swap_chain_image_views.emplace_back(logical_device, imageViewCreateInfo);
+        imageViewCI.image = image;
+        swap_chain_image_views.emplace_back(logical_device, imageViewCI);
     }
 }
 
@@ -367,46 +367,46 @@ void WEngine::create_graphics_pipeline()
 {
     auto shaderModule = CreateShaderModule(ReadShaderFile("src/shaders/shader.spv"));
 
-    vk::PipelineShaderStageCreateInfo vertexShaderInfo {};
-    vertexShaderInfo.stage = vk::ShaderStageFlagBits::eVertex;
-    vertexShaderInfo.module = shaderModule;
-    vertexShaderInfo.pName = "vertMain";
+    vk::PipelineShaderStageCreateInfo vertexShaderCI {};
+    vertexShaderCI.stage = vk::ShaderStageFlagBits::eVertex;
+    vertexShaderCI.module = shaderModule;
+    vertexShaderCI.pName = "vertMain";
 
-    vk::PipelineShaderStageCreateInfo fragmentShaderInfo {};
-    fragmentShaderInfo.stage = vk::ShaderStageFlagBits::eFragment;
-    fragmentShaderInfo.module = shaderModule;
-    fragmentShaderInfo.pName = "fragMain";
+    vk::PipelineShaderStageCreateInfo fragmentShaderCI {};
+    fragmentShaderCI.stage = vk::ShaderStageFlagBits::eFragment;
+    fragmentShaderCI.module = shaderModule;
+    fragmentShaderCI.pName = "fragMain";
 
-    vk::PipelineShaderStageCreateInfo shaderStages[] = {vertexShaderInfo, fragmentShaderInfo};
-    vk::PipelineVertexInputStateCreateInfo vertexInputInfo {};
+    vk::PipelineShaderStageCreateInfo shaderStages[] = {vertexShaderCI, fragmentShaderCI};
+    vk::PipelineVertexInputStateCreateInfo vertexInputCI {};
 
-    vk::PipelineInputAssemblyStateCreateInfo inputAssembly {};
-    inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
+    vk::PipelineInputAssemblyStateCreateInfo inputAssemblyCI {};
+    inputAssemblyCI.topology = vk::PrimitiveTopology::eTriangleList;
 
     std::vector dynamicStates = {
         vk::DynamicState::eViewport,
         vk::DynamicState::eScissor
     };
-    vk::PipelineDynamicStateCreateInfo dynamicState{};
-    dynamicState.dynamicStateCount = dynamicStates.size();
-    dynamicState.pDynamicStates = dynamicStates.data();
+    vk::PipelineDynamicStateCreateInfo dynamicStateCI{};
+    dynamicStateCI.dynamicStateCount = dynamicStates.size();
+    dynamicStateCI.pDynamicStates = dynamicStates.data();
 
-    vk::PipelineViewportStateCreateInfo viewPort {};
-    viewPort.viewportCount = 1;
-    viewPort.scissorCount = 1;
+    vk::PipelineViewportStateCreateInfo viewPortCI {};
+    viewPortCI.viewportCount = 1;
+    viewPortCI.scissorCount = 1;
 
-    vk::PipelineRasterizationStateCreateInfo rasterizer {};
-    rasterizer.depthClampEnable = vk::False;
-    rasterizer.rasterizerDiscardEnable = vk::False;
-    rasterizer.polygonMode = vk::PolygonMode::eFill;
-    rasterizer.cullMode = vk::CullModeFlagBits::eBack;
-    rasterizer.frontFace = vk::FrontFace::eClockwise;
-    rasterizer.depthBiasEnable = vk::False;
-    rasterizer.lineWidth = 1.0f;
+    vk::PipelineRasterizationStateCreateInfo rasterizerCI {};
+    rasterizerCI.depthClampEnable = vk::False;
+    rasterizerCI.rasterizerDiscardEnable = vk::False;
+    rasterizerCI.polygonMode = vk::PolygonMode::eFill;
+    rasterizerCI.cullMode = vk::CullModeFlagBits::eBack;
+    rasterizerCI.frontFace = vk::FrontFace::eClockwise;
+    rasterizerCI.depthBiasEnable = vk::False;
+    rasterizerCI.lineWidth = 1.0f;
 
-    vk::PipelineMultisampleStateCreateInfo multisampling {};
-    multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
-    multisampling.sampleShadingEnable = vk::False;
+    vk::PipelineMultisampleStateCreateInfo multisamplingCI {};
+    multisamplingCI.rasterizationSamples = vk::SampleCountFlagBits::e1;
+    multisamplingCI.sampleShadingEnable = vk::False;
 
     vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
     colorBlendAttachment.blendEnable = vk::False;
@@ -418,57 +418,57 @@ void WEngine::create_graphics_pipeline()
     colorBlendAttachment.alphaBlendOp = vk::BlendOp::eAdd;
     colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
 
-    vk::PipelineColorBlendStateCreateInfo colorBlending {};
-    colorBlending.logicOpEnable = vk::False;
-    colorBlending.attachmentCount = 1;
-    colorBlending.pAttachments = &colorBlendAttachment;
+    vk::PipelineColorBlendStateCreateInfo colorBlendingCI {};
+    colorBlendingCI.logicOpEnable = vk::False;
+    colorBlendingCI.attachmentCount = 1;
+    colorBlendingCI.pAttachments = &colorBlendAttachment;
 
-    vk::PipelineLayoutCreateInfo pipelineLayoutInfo {};
-    pipelineLayoutInfo.setLayoutCount = 0;
-    pipelineLayoutInfo.pushConstantRangeCount = 0;
-    pipeline_layout = {logical_device, pipelineLayoutInfo};
+    vk::PipelineLayoutCreateInfo pipelineLayoutCI {};
+    pipelineLayoutCI.setLayoutCount = 0;
+    pipelineLayoutCI.pushConstantRangeCount = 0;
+    pipeline_layout = {logical_device, pipelineLayoutCI};
 
-    vk::PipelineRenderingCreateInfo pipelineRenderingInfo {};
-    pipelineRenderingInfo.colorAttachmentCount = 1;
-    pipelineRenderingInfo.pColorAttachmentFormats = &swap_chain_image_format;
+    vk::PipelineRenderingCreateInfo pipelineRenderingCI {};
+    pipelineRenderingCI.colorAttachmentCount = 1;
+    pipelineRenderingCI.pColorAttachmentFormats = &swap_chain_image_format;
 
-    vk::GraphicsPipelineCreateInfo pipelineInfo {};
-    pipelineInfo.pNext = &pipelineRenderingInfo;
-    pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = shaderStages;
-    pipelineInfo.pVertexInputState = &vertexInputInfo;
-    pipelineInfo.pInputAssemblyState = &inputAssembly;
-    pipelineInfo.pViewportState = &viewPort;
-    pipelineInfo.pRasterizationState = &rasterizer;
-    pipelineInfo.pMultisampleState = &multisampling;
-    pipelineInfo.pColorBlendState = &colorBlending;
-    pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.layout = pipeline_layout;
-    pipelineInfo.renderPass = nullptr;
+    vk::GraphicsPipelineCreateInfo pipelineCI {};
+    pipelineCI.pNext = &pipelineRenderingCI;
+    pipelineCI.stageCount = 2;
+    pipelineCI.pStages = shaderStages;
+    pipelineCI.pVertexInputState = &vertexInputCI;
+    pipelineCI.pInputAssemblyState = &inputAssemblyCI;
+    pipelineCI.pViewportState = &viewPortCI;
+    pipelineCI.pRasterizationState = &rasterizerCI;
+    pipelineCI.pMultisampleState = &multisamplingCI;
+    pipelineCI.pColorBlendState = &colorBlendingCI;
+    pipelineCI.pDynamicState = &dynamicStateCI;
+    pipelineCI.layout = pipeline_layout;
+    pipelineCI.renderPass = nullptr;
 
-    graphics_pipeline = {logical_device, nullptr, pipelineInfo};
+    graphics_pipeline = {logical_device, nullptr, pipelineCI};
 }
 
 /* Command pools manage the memory that is used to store the buffers and command buffers are allocated from them */
 void WEngine::create_command_pool()
 {
-    vk::CommandPoolCreateInfo poolInfo {};
-    poolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
-    poolInfo.queueFamilyIndex = queue_index;
+    vk::CommandPoolCreateInfo poolCI {};
+    poolCI.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
+    poolCI.queueFamilyIndex = queue_index;
 
-    command_pool = {logical_device, poolInfo};
+    command_pool = {logical_device, poolCI};
 }
 
 /* You have to record all the operations you want to perform in command buffer objects
  * it is more efficient to process the commands all together */
 void WEngine::create_command_buffer()
 {
-    vk::CommandBufferAllocateInfo allocateInfo {};
-    allocateInfo.commandPool = command_pool;
-    allocateInfo.level = vk::CommandBufferLevel::ePrimary;
-    allocateInfo.commandBufferCount = MAX_FRAMES_IN_FLIGHT;
+    vk::CommandBufferAllocateInfo allocateI {};
+    allocateI.commandPool = command_pool;
+    allocateI.level = vk::CommandBufferLevel::ePrimary;
+    allocateI.commandBufferCount = MAX_FRAMES_IN_FLIGHT;
 
-    command_buffers = vk::raii::CommandBuffers(logical_device, allocateInfo);
+    command_buffers = vk::raii::CommandBuffers(logical_device, allocateI);
 }
 
 /* These are used to keep the gpu in sync with itself and with the cpu */
@@ -479,13 +479,13 @@ void WEngine::create_sync_object()
     for (size_t i = 0; i < swap_chain_images.size(); i++)
         render_finished_semaphores.emplace_back(logical_device, vk::SemaphoreCreateInfo());
 
-    vk::FenceCreateInfo fenceInfo {};
-    fenceInfo.flags = vk::FenceCreateFlagBits::eSignaled;
+    vk::FenceCreateInfo fenceCI {};
+    fenceCI.flags = vk::FenceCreateFlagBits::eSignaled;
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
         present_complete_semaphores.emplace_back(logical_device, vk::SemaphoreCreateInfo());
-        in_flight_fences.emplace_back(logical_device, fenceInfo);
+        in_flight_fences.emplace_back(logical_device, fenceCI);
     }
 }
 
