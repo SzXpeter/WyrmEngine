@@ -9,6 +9,8 @@
 #define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
 #include <vulkan/vulkan_raii.hpp>
 
+#include <glm/glm.hpp>
+
 #ifdef NDEBUG
 static constexpr bool enableValidationLayers = false;
 #else
@@ -100,4 +102,23 @@ private:
     static void frame_buffer_resized_callback(GLFWwindow* window, int width, int height);
 
     static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void*);
+};
+
+struct Vertex
+{
+    glm::vec2 position;
+    glm::vec3 color;
+
+    static vk::VertexInputBindingDescription GetBindingDescription()
+    {
+        return { 0, sizeof(Vertex), vk::VertexInputRate::eVertex };
+    }
+
+    static std::array<vk::VertexInputAttributeDescription, 2> GetAttributeDescriptions()
+    {
+        return {
+            vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, position)),
+            vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color))
+        };
+    }
 };
