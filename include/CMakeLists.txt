@@ -1,9 +1,9 @@
-target_include_directories(WyrmEngine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(WyrmEngine PUBLIC .)
 
 target_sources(WyrmEngine
-PUBLIC
+    PUBLIC
     FILE_SET HEADERS
-    BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
+    BASE_DIRS .
     FILES
         WEngine.h
 )

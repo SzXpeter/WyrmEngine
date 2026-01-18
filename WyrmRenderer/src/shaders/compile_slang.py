@@ -18,4 +18,4 @@ arguments.extend(["-o", "shader.spv"])
 
 subprocess.run(arguments, check=True)
 
-os.replace("shader.spv", "../../cmake-build-debug/src/shaders/shader.spv")
+os.replace("shader.spv", "../../../cmake-build-debug/src/shaders/shader.spv")
