@@ -68,6 +68,8 @@ private:
 
     vk::raii::Buffer vertex_buffer = nullptr;
     vk::raii::DeviceMemory vertex_buffer_memory = nullptr;
+    vk::raii::Buffer index_buffer = nullptr;
+    vk::raii::DeviceMemory index_buffer_memory = nullptr;
 
     vk::raii::CommandPool command_pool = nullptr;
     std::vector<vk::raii::CommandBuffer> command_buffers;
@@ -82,19 +84,29 @@ private:
     void create_vulkan_instance();
     [[nodiscard]] std::vector<const char*> get_required_layers() const;
     [[nodiscard]] std::vector<const char*> get_required_extensions() const;
+
     void setup_debug_messenger();
     void create_surface();
     void pick_physical_device();
+
     void create_logical_device();
     uint32_t get_presentation_qfp_index(uint32_t& graphicsIndex) const;
+
     void create_swap_chain();
     void create_image_views();
+
     void create_graphics_pipeline();
     [[nodiscard]] vk::raii::ShaderModule create_shader_module(const std::vector<char>& code);
-    void create_vertex_buffer();
-    [[nodiscard]] uint32_t find_memory_type(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
+
     void create_command_pool();
     void create_command_buffer();
+
+    void create_vertex_buffer();
+    void create_index_buffer();
+    void create_buffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory);
+    [[nodiscard]] uint32_t find_memory_type(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
+    void copy_buffer(const vk::raii::Buffer& srcBuffer, const vk::raii::Buffer& dstBuffer, vk::DeviceSize size) const;
+
     void create_sync_object();
 
     void destroy_vulkan();
@@ -141,7 +153,12 @@ vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& 
 std::vector<char> readShaderFile(const std::string& filename);
 
 const std::vector<Vertex> vertices = {
-    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 0.0f, 1.0f}}
+};
+
+const std::vector<uint16_t> indices = {
+    0, 1, 2, 2, 3, 0
 };

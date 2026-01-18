@@ -50,9 +50,10 @@ void WRenderer::InitVulkan()
     create_swap_chain();
     create_image_views();
     create_graphics_pipeline();
-    create_vertex_buffer();
     create_command_pool();
     create_command_buffer();
+    create_vertex_buffer();
+    create_index_buffer();
     create_sync_object();
 }
 
@@ -138,7 +139,7 @@ void WRenderer::create_vulkan_instance()
         .applicationVersion = VK_MAKE_VERSION( 1, 0, 0 ),
         .pEngineName = "No Engine",
         .engineVersion = VK_MAKE_VERSION( 1, 0, 0 ),
-        .apiVersion  = vk::ApiVersion14
+        .apiVersion  = vk::ApiVersion13
     };
 
     const auto requiredLayers = get_required_layers();
@@ -241,7 +242,7 @@ void WRenderer::pick_physical_device()
     const auto device_it = std::ranges::find_if(physicalDevices,
                                                 [&](const auto& physicalDevice) {
                                                     auto queueFamilies = physicalDevice.getQueueFamilyProperties();
-                                                    bool isSuitable = physicalDevice.getProperties().apiVersion >= VK_API_VERSION_1_4;
+                                                    bool isSuitable = physicalDevice.getProperties().apiVersion >= VK_API_VERSION_1_3;
 
                                                     const auto queueFamilyProperty_it = std::ranges::find_if(queueFamilies,
                                                         [](const auto& qfp) {
@@ -522,39 +523,6 @@ vk::raii::ShaderModule WRenderer::create_shader_module(const std::vector<char>& 
     return {device, shaderModuleCI};
 }
 
-void WRenderer::create_vertex_buffer()
-{
-    const vk::BufferCreateInfo bufferCI{
-        .size = sizeof(vertices[0]) * vertices.size(),
-        .usage = vk::BufferUsageFlagBits::eVertexBuffer,
-        .sharingMode = vk::SharingMode::eExclusive
-    };
-    vertex_buffer = {device, bufferCI};
-
-    const vk::MemoryRequirements memRequirements = vertex_buffer.getMemoryRequirements();
-    const vk::MemoryAllocateInfo memAllocInfo {
-        .allocationSize = memRequirements.size,
-        .memoryTypeIndex = find_memory_type(memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent)
-    };
-    vertex_buffer_memory = {device, memAllocInfo};
-
-    vertex_buffer.bindMemory(*vertex_buffer_memory, 0);
-
-    void* data = vertex_buffer_memory.mapMemory(0, bufferCI.size);
-    memcpy(data, vertices.data(), bufferCI.size);
-    vertex_buffer_memory.unmapMemory();
-}
-
-uint32_t WRenderer::find_memory_type(const uint32_t typeFilter, const vk::MemoryPropertyFlags properties) const
-{
-    const auto memProperties = physical_device.getMemoryProperties();
-    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
-        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
-            return i;
-
-    throw std::runtime_error("failed to find a suitable memory type!");
-}
-
 void WRenderer::create_command_pool()
 {
     const vk::CommandPoolCreateInfo poolCI {
@@ -572,6 +540,108 @@ void WRenderer::create_command_buffer()
         .commandBufferCount = MAX_FRAMES_IN_FLIGHT
     };
     command_buffers = vk::raii::CommandBuffers(device, allocateI);
+}
+
+void WRenderer::create_vertex_buffer()
+{
+    const vk::DeviceSize bufferSize {sizeof(vertices[0]) * vertices.size()};
+    vk::raii::Buffer stagingBuffer = nullptr;
+    vk::raii::DeviceMemory stagingBufferMemory = nullptr;
+    create_buffer(
+        bufferSize,
+        vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+        stagingBuffer,
+        stagingBufferMemory
+    );
+
+    void* data = stagingBufferMemory.mapMemory(0, bufferSize);
+    memcpy(data, vertices.data(), bufferSize);
+    stagingBufferMemory.unmapMemory();
+
+    create_buffer(
+        bufferSize,
+        vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
+        vk::MemoryPropertyFlagBits::eDeviceLocal,
+        vertex_buffer,
+        vertex_buffer_memory
+    );
+
+    copy_buffer(stagingBuffer, vertex_buffer, bufferSize);
+}
+
+void WRenderer::create_index_buffer()
+{
+    const vk::DeviceSize bufferSize {sizeof(indices[0]) * indices.size()};
+    vk::raii::Buffer stagingBuffer = nullptr;
+    vk::raii::DeviceMemory stagingBufferMemory = nullptr;
+    create_buffer(
+        bufferSize,
+        vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+        stagingBuffer,
+        stagingBufferMemory
+    );
+
+    void* data = stagingBufferMemory.mapMemory(0, bufferSize);
+    memcpy(data, indices.data(), bufferSize);
+    stagingBufferMemory.unmapMemory();
+
+    create_buffer(
+        bufferSize,
+        vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
+        vk::MemoryPropertyFlagBits::eDeviceLocal,
+        index_buffer,
+        index_buffer_memory
+    );
+
+    copy_buffer(stagingBuffer, index_buffer, bufferSize);
+}
+
+void WRenderer::create_buffer(const vk::DeviceSize size, const vk::BufferUsageFlags usage, const vk::MemoryPropertyFlags properties, vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory)
+{
+    const vk::BufferCreateInfo bufferCI{
+        .size = size,
+        .usage = usage,
+        .sharingMode = vk::SharingMode::eExclusive
+    };
+    buffer = {device, bufferCI};
+
+    const vk::MemoryRequirements memRequirements = buffer.getMemoryRequirements();
+    const vk::MemoryAllocateInfo memAllocInfo {
+        .allocationSize = memRequirements.size,
+        .memoryTypeIndex = find_memory_type(memRequirements.memoryTypeBits, properties)
+    };
+    bufferMemory = {device, memAllocInfo};
+
+    buffer.bindMemory(*bufferMemory, 0);
+}
+
+uint32_t WRenderer::find_memory_type(const uint32_t typeFilter, const vk::MemoryPropertyFlags properties) const
+{
+    const auto memProperties = physical_device.getMemoryProperties();
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
+        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
+            return i;
+
+    throw std::runtime_error("failed to find a suitable memory type!");
+}
+
+void WRenderer::copy_buffer(const vk::raii::Buffer& srcBuffer, const vk::raii::Buffer& dstBuffer, const vk::DeviceSize size) const
+{
+    const vk::CommandBufferAllocateInfo allocateI {
+        .commandPool = command_pool,
+        .level = vk::CommandBufferLevel::ePrimary,
+        .commandBufferCount = 1
+    };
+    vk::raii::CommandBuffer commandCopyBuffer = std::move(device.allocateCommandBuffers(allocateI).front());
+
+    commandCopyBuffer.begin(vk::CommandBufferBeginInfo {.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+    commandCopyBuffer.copyBuffer(srcBuffer, dstBuffer, vk::BufferCopy(0, 0, size));
+    commandCopyBuffer.end();
+
+    graphics_queue.submit(vk::SubmitInfo {.commandBufferCount = 1, .pCommandBuffers = &*commandCopyBuffer}, nullptr);
+    graphics_queue.waitIdle();
 }
 
 void WRenderer::create_sync_object()
@@ -602,23 +672,25 @@ void WRenderer::destroy_vulkan()
     present_complete_semaphores.clear();
 
     command_buffers.clear();
-    command_pool = nullptr;
+    command_pool.clear();
 
+    index_buffer_memory.clear();
+    index_buffer.clear();
     vertex_buffer_memory.clear();
     vertex_buffer.clear();
 
-    pipeline_layout = nullptr;
-    graphics_pipeline = nullptr;
+    pipeline_layout.clear();
+    graphics_pipeline.clear();
 
-    graphics_queue = nullptr;
-    present_queue = nullptr;
+    graphics_queue.clear();
+    present_queue.clear();
 
-    device = nullptr;
-    physical_device = nullptr;
+    device.clear();
+    physical_device.clear();
 
-    surface = nullptr;
-    debug_messenger = nullptr;
-    instance = nullptr;
+    surface.clear();
+    debug_messenger.clear();
+    instance.clear();
 }
 
 void WRenderer::cleanup_swap_chain()
@@ -676,10 +748,11 @@ void WRenderer::record_command_buffer(const uint32_t imageIndex) const
     command_buffers[frame_index].beginRendering(renderingI);
     command_buffers[frame_index].bindPipeline(vk::PipelineBindPoint::eGraphics, graphics_pipeline);
     command_buffers[frame_index].bindVertexBuffers(0, *vertex_buffer, {0});
+    command_buffers[frame_index].bindIndexBuffer(*index_buffer, 0, vk::IndexType::eUint16);
     command_buffers[frame_index].setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swap_chain_extent.width), static_cast<float>(swap_chain_extent.height), 0.0f, 1.0f));
     command_buffers[frame_index].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swap_chain_extent));
 
-    command_buffers[frame_index].draw(3, 1, 0, 0);
+    command_buffers[frame_index].drawIndexed(indices.size(), 1, 0, 0, 0);
 
     command_buffers[frame_index].endRendering();
     transition_image_layout(
