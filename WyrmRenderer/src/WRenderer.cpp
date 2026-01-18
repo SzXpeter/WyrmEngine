@@ -4,6 +4,11 @@
 
 #include "WRenderer.h"
 
+#define VMA_IMPLEMENTATION
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
+#include "vk_mem_alloc.h"
+
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -47,6 +52,7 @@ void WRenderer::InitVulkan()
     create_surface();
     pick_physical_device();
     create_logical_device();
+    vma_init();
     create_swap_chain();
     create_image_views();
     create_graphics_pipeline();
@@ -290,8 +296,12 @@ void WRenderer::create_logical_device()
         .synchronization2 = true,
         .dynamicRendering = true
     };
-    vk::PhysicalDeviceVulkan11Features vulkan11Features {
+    vk::PhysicalDeviceVulkan12Features vulkan12Features {
         .pNext = &vulkan13Features,
+        .bufferDeviceAddress = true
+    };
+    vk::PhysicalDeviceVulkan11Features vulkan11Features {
+        .pNext = &vulkan12Features,
         .shaderDrawParameters = true
     };
     vk::PhysicalDeviceFeatures2 physicalDeviceFeatures2 {
@@ -369,6 +379,23 @@ uint32_t WRenderer::get_presentation_qfp_index(uint32_t& graphicsIndex) const
     }
 
     return presentationIndex;
+}
+
+void WRenderer::vma_init()
+{
+    constexpr VmaVulkanFunctions vkFunctions {
+        .vkGetInstanceProcAddr = vkGetInstanceProcAddr,
+        .vkGetDeviceProcAddr = vkGetDeviceProcAddr,
+        .vkCreateImage = vkCreateImage
+    };
+    const VmaAllocatorCreateInfo allocatorCI {
+        .flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
+        .physicalDevice = *physical_device,
+        .device = *device,
+        .pVulkanFunctions = &vkFunctions,
+        .instance = *instance
+    };
+    vmaCreateAllocator(&allocatorCI, &allocator);
 }
 
 void WRenderer::create_swap_chain()
@@ -542,99 +569,101 @@ void WRenderer::create_command_buffer()
     command_buffers = vk::raii::CommandBuffers(device, allocateI);
 }
 
+void create_buffer(const VmaAllocator& _allocator, vk::DeviceSize size, vk::BufferUsageFlags usage, VmaMemoryUsage memoryUsage, vk::Buffer& buffer, VmaAllocation& allocation);
 void WRenderer::create_vertex_buffer()
 {
     const vk::DeviceSize bufferSize {sizeof(vertices[0]) * vertices.size()};
-    vk::raii::Buffer stagingBuffer = nullptr;
-    vk::raii::DeviceMemory stagingBufferMemory = nullptr;
+    vk::Buffer stagingBuffer;
+    VmaAllocation stagingAllocation;
     create_buffer(
+        allocator,
         bufferSize,
         vk::BufferUsageFlagBits::eTransferSrc,
-        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+        VMA_MEMORY_USAGE_CPU_ONLY,
         stagingBuffer,
-        stagingBufferMemory
+        stagingAllocation
     );
 
-    void* data = stagingBufferMemory.mapMemory(0, bufferSize);
+    void* data = nullptr;
+    vmaMapMemory(allocator, stagingAllocation, &data);
     memcpy(data, vertices.data(), bufferSize);
-    stagingBufferMemory.unmapMemory();
+    vmaUnmapMemory(allocator, stagingAllocation);
 
     create_buffer(
+        allocator,
         bufferSize,
         vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
-        vk::MemoryPropertyFlagBits::eDeviceLocal,
+        VMA_MEMORY_USAGE_GPU_ONLY,
         vertex_buffer,
-        vertex_buffer_memory
+        vertex_buffer_alloc
     );
 
     copy_buffer(stagingBuffer, vertex_buffer, bufferSize);
+    vmaDestroyBuffer(allocator, stagingBuffer, stagingAllocation);
 }
 
 void WRenderer::create_index_buffer()
 {
     const vk::DeviceSize bufferSize {sizeof(indices[0]) * indices.size()};
-    vk::raii::Buffer stagingBuffer = nullptr;
-    vk::raii::DeviceMemory stagingBufferMemory = nullptr;
+    vk::Buffer stagingBuffer;
+    VmaAllocation stagingAllocation;
     create_buffer(
+        allocator,
         bufferSize,
         vk::BufferUsageFlagBits::eTransferSrc,
-        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+        VMA_MEMORY_USAGE_CPU_ONLY,
         stagingBuffer,
-        stagingBufferMemory
+        stagingAllocation
     );
 
-    void* data = stagingBufferMemory.mapMemory(0, bufferSize);
+    void* data = nullptr;
+    vmaMapMemory(allocator, stagingAllocation, &data);
     memcpy(data, indices.data(), bufferSize);
-    stagingBufferMemory.unmapMemory();
+    vmaUnmapMemory(allocator, stagingAllocation);
 
     create_buffer(
+        allocator,
         bufferSize,
         vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
-        vk::MemoryPropertyFlagBits::eDeviceLocal,
+        VMA_MEMORY_USAGE_GPU_ONLY,
         index_buffer,
-        index_buffer_memory
+        index_buffer_alloc
     );
 
     copy_buffer(stagingBuffer, index_buffer, bufferSize);
+    vmaDestroyBuffer(allocator, stagingBuffer, stagingAllocation);
 }
 
-void WRenderer::create_buffer(const vk::DeviceSize size, const vk::BufferUsageFlags usage, const vk::MemoryPropertyFlags properties, vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory)
+void create_buffer(const VmaAllocator& _allocator, const vk::DeviceSize size, const vk::BufferUsageFlags usage, const VmaMemoryUsage memoryUsage, vk::Buffer& buffer, VmaAllocation& allocation)
 {
     const vk::BufferCreateInfo bufferCI{
+        .sType = vk::StructureType::eBufferCreateInfo,
         .size = size,
         .usage = usage,
         .sharingMode = vk::SharingMode::eExclusive
     };
-    buffer = {device, bufferCI};
 
-    const vk::MemoryRequirements memRequirements = buffer.getMemoryRequirements();
-    const vk::MemoryAllocateInfo memAllocInfo {
-        .allocationSize = memRequirements.size,
-        .memoryTypeIndex = find_memory_type(memRequirements.memoryTypeBits, properties)
+    const VmaAllocationCreateInfo memoryAllocationCI {
+        .usage = memoryUsage,
     };
-    bufferMemory = {device, memAllocInfo};
-
-    buffer.bindMemory(*bufferMemory, 0);
+    vmaCreateBuffer(
+        _allocator,
+        &*bufferCI,
+        &memoryAllocationCI,
+        reinterpret_cast<VkBuffer*>(&buffer),
+        &allocation,
+        nullptr
+    );
 }
 
-uint32_t WRenderer::find_memory_type(const uint32_t typeFilter, const vk::MemoryPropertyFlags properties) const
-{
-    const auto memProperties = physical_device.getMemoryProperties();
-    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
-        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
-            return i;
-
-    throw std::runtime_error("failed to find a suitable memory type!");
-}
-
-void WRenderer::copy_buffer(const vk::raii::Buffer& srcBuffer, const vk::raii::Buffer& dstBuffer, const vk::DeviceSize size) const
+void WRenderer::copy_buffer(const vk::Buffer& srcBuffer, const vk::Buffer& dstBuffer, const vk::DeviceSize size) const
 {
     const vk::CommandBufferAllocateInfo allocateI {
         .commandPool = command_pool,
         .level = vk::CommandBufferLevel::ePrimary,
         .commandBufferCount = 1
     };
-    vk::raii::CommandBuffer commandCopyBuffer = std::move(device.allocateCommandBuffers(allocateI).front());
+    const vk::raii::CommandBuffer commandCopyBuffer = std::move(device.allocateCommandBuffers(allocateI).front());
 
     commandCopyBuffer.begin(vk::CommandBufferBeginInfo {.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
     commandCopyBuffer.copyBuffer(srcBuffer, dstBuffer, vk::BufferCopy(0, 0, size));
@@ -674,16 +703,16 @@ void WRenderer::destroy_vulkan()
     command_buffers.clear();
     command_pool.clear();
 
-    index_buffer_memory.clear();
-    index_buffer.clear();
-    vertex_buffer_memory.clear();
-    vertex_buffer.clear();
+    vmaDestroyBuffer(allocator, index_buffer, index_buffer_alloc);
+    vmaDestroyBuffer(allocator, vertex_buffer, vertex_buffer_alloc);
 
     pipeline_layout.clear();
     graphics_pipeline.clear();
 
     graphics_queue.clear();
     present_queue.clear();
+
+    vmaDestroyAllocator(allocator);
 
     device.clear();
     physical_device.clear();
@@ -747,8 +776,8 @@ void WRenderer::record_command_buffer(const uint32_t imageIndex) const
 
     command_buffers[frame_index].beginRendering(renderingI);
     command_buffers[frame_index].bindPipeline(vk::PipelineBindPoint::eGraphics, graphics_pipeline);
-    command_buffers[frame_index].bindVertexBuffers(0, *vertex_buffer, {0});
-    command_buffers[frame_index].bindIndexBuffer(*index_buffer, 0, vk::IndexType::eUint16);
+    command_buffers[frame_index].bindVertexBuffers(0, vertex_buffer, {0});
+    command_buffers[frame_index].bindIndexBuffer(index_buffer, 0, vk::IndexType::eUint32);
     command_buffers[frame_index].setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swap_chain_extent.width), static_cast<float>(swap_chain_extent.height), 0.0f, 1.0f));
     command_buffers[frame_index].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swap_chain_extent));
 

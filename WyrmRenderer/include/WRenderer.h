@@ -8,7 +8,6 @@
 
 #define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
 #include <vulkan/vulkan_raii.hpp>
-
 #include <glm/glm.hpp>
 
 #ifdef NDEBUG
@@ -19,6 +18,12 @@ const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
 };
 #endif
+
+struct VmaAllocator_T;
+using VmaAllocator = VmaAllocator_T*;
+
+struct VmaAllocation_T;
+using VmaAllocation = VmaAllocation_T*;
 
 class WRenderer
 {
@@ -53,6 +58,8 @@ private:
     vk::raii::PhysicalDevice physical_device = nullptr;
     vk::raii::Device device = nullptr;
 
+    VmaAllocator allocator = nullptr;
+
     uint32_t queue_index = ~0;
     vk::raii::Queue graphics_queue = nullptr;
     vk::raii::Queue present_queue = nullptr;
@@ -66,10 +73,10 @@ private:
     vk::raii::PipelineLayout pipeline_layout = nullptr;
     vk::raii::Pipeline graphics_pipeline = nullptr;
 
-    vk::raii::Buffer vertex_buffer = nullptr;
-    vk::raii::DeviceMemory vertex_buffer_memory = nullptr;
-    vk::raii::Buffer index_buffer = nullptr;
-    vk::raii::DeviceMemory index_buffer_memory = nullptr;
+    vk::Buffer vertex_buffer = nullptr;
+    VmaAllocation vertex_buffer_alloc = nullptr;
+    vk::Buffer index_buffer = nullptr;
+    VmaAllocation index_buffer_alloc = nullptr;
 
     vk::raii::CommandPool command_pool = nullptr;
     std::vector<vk::raii::CommandBuffer> command_buffers;
@@ -87,10 +94,11 @@ private:
 
     void setup_debug_messenger();
     void create_surface();
-    void pick_physical_device();
 
+    void pick_physical_device();
     void create_logical_device();
     uint32_t get_presentation_qfp_index(uint32_t& graphicsIndex) const;
+    void vma_init();
 
     void create_swap_chain();
     void create_image_views();
@@ -103,9 +111,7 @@ private:
 
     void create_vertex_buffer();
     void create_index_buffer();
-    void create_buffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory);
-    [[nodiscard]] uint32_t find_memory_type(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
-    void copy_buffer(const vk::raii::Buffer& srcBuffer, const vk::raii::Buffer& dstBuffer, vk::DeviceSize size) const;
+    void copy_buffer(const vk::Buffer& srcBuffer, const vk::Buffer& dstBuffer, vk::DeviceSize size) const;
 
     void create_sync_object();
 
@@ -159,6 +165,6 @@ const std::vector<Vertex> vertices = {
     {{-0.5f, 0.5f}, {1.0f, 0.0f, 1.0f}}
 };
 
-const std::vector<uint16_t> indices = {
+const std::vector<uint32_t> indices = {
     0, 1, 2, 2, 3, 0
 };
