@@ -80,14 +80,19 @@ private:
     static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
     void create_vulkan_instance();
+    [[nodiscard]] std::vector<const char*> get_required_layers() const;
+    [[nodiscard]] std::vector<const char*> get_required_extensions() const;
     void setup_debug_messenger();
     void create_surface();
     void pick_physical_device();
     void create_logical_device();
+    uint32_t get_presentation_qfp_index(uint32_t& graphicsIndex) const;
     void create_swap_chain();
     void create_image_views();
     void create_graphics_pipeline();
+    [[nodiscard]] vk::raii::ShaderModule create_shader_module(const std::vector<char>& code);
     void create_vertex_buffer();
+    [[nodiscard]] uint32_t find_memory_type(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
     void create_command_pool();
     void create_command_buffer();
     void create_sync_object();
@@ -129,16 +134,11 @@ struct Vertex
     }
 };
 
-std::vector<const char*> getRequiredLayers(const vk::raii::Context& context);
-std::vector<const char*> getRequiredExtensions(const vk::raii::Context& context);
-uint32_t getPresentationQFPIndex(const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::SurfaceKHR& surface, uint32_t& graphicsIndex);
 vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
 vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities, GLFWwindow* window);
 uint32_t chooseSwapMinImageCount(const vk::SurfaceCapabilitiesKHR& swapSurfaceCapabilities);
 vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
-std::vector<char> read_shader_file(const std::string& filename);
-[[nodiscard]] vk::raii::ShaderModule create_shader_module(const vk::raii::Device& device, const std::vector<char>& code);
-uint32_t findMemoryType(const vk::PhysicalDevice& physicalDevice, uint32_t typeFilter, vk::MemoryPropertyFlags properties);
+std::vector<char> readShaderFile(const std::string& filename);
 
 const std::vector<Vertex> vertices = {
     {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},

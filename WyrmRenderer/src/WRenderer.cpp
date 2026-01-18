@@ -25,6 +25,45 @@ void WRenderer::SetWindowSize(const int _width, const int _height)
     height = _height;
 }
 
+void WRenderer::InitWindow()
+{
+#ifdef __linux__
+    glfwWindowHint(GLFW_PLATFORM, GLFW_ANY_PLATFORM);
+#endif
+
+    glfwInit();
+
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+
+    window = glfwCreateWindow(static_cast<int>(width), static_cast<int>(height), "Vulkan", nullptr, nullptr);
+    glfwSetWindowUserPointer(window, this);
+    glfwSetFramebufferSizeCallback(window, frame_buffer_resize_callback);
+}
+
+void WRenderer::InitVulkan()
+{
+    create_vulkan_instance();
+    setup_debug_messenger();
+    create_surface();
+    pick_physical_device();
+    create_logical_device();
+    create_swap_chain();
+    create_image_views();
+    create_graphics_pipeline();
+    create_vertex_buffer();
+    create_command_pool();
+    create_command_buffer();
+    create_sync_object();
+}
+
+void WRenderer::Cleanup()
+{
+    destroy_vulkan();
+
+    glfwDestroyWindow(window);
+    glfwTerminate();
+}
+
 void WRenderer::DrawFrame()
 {
     if (device.waitForFences(*in_flight_fences[frame_index], vk::True, UINT64_MAX) != vk::Result::eSuccess)
@@ -34,16 +73,16 @@ void WRenderer::DrawFrame()
     auto [result, imageIndex] = swap_chain.acquireNextImage(UINT64_MAX, *present_complete_semaphores[frame_index], nullptr);
     switch (result)
     {
-        case vk::Result::eSuccess:
-        case vk::Result::eSuboptimalKHR:
-            break;
+    case vk::Result::eSuccess:
+    case vk::Result::eSuboptimalKHR:
+        break;
 
-        case vk::Result::eErrorOutOfDateKHR:
-            recreate_swap_chain();
-            break;
+    case vk::Result::eErrorOutOfDateKHR:
+        recreate_swap_chain();
+        break;
 
-        default:
-            throw std::runtime_error("failed to acquire swap chain image");
+    default:
+        throw std::runtime_error("failed to acquire swap chain image");
     }
 
     command_buffers[frame_index].reset();
@@ -77,50 +116,19 @@ void WRenderer::DrawFrame()
     }
     switch (result)
     {
-        case vk::Result::eErrorOutOfDateKHR:
-        case vk::Result::eSuboptimalKHR:
-            recreate_swap_chain();
-            break;
+    case vk::Result::eErrorOutOfDateKHR:
+    case vk::Result::eSuboptimalKHR:
+        recreate_swap_chain();
+        break;
 
-        case vk::Result::eSuccess:
-            break;
+    case vk::Result::eSuccess:
+        break;
 
-        default:
-            throw std::runtime_error("failed to present swap chain image");
+    default:
+        throw std::runtime_error("failed to present swap chain image");
     }
 
     frame_index = (frame_index + 1) % MAX_FRAMES_IN_FLIGHT;
-}
-
-void WRenderer::InitWindow()
-{
-#ifdef __linux__
-    glfwWindowHint(GLFW_PLATFORM, GLFW_ANY_PLATFORM);
-#endif
-
-    glfwInit();
-
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-
-    window = glfwCreateWindow(static_cast<int>(width), static_cast<int>(height), "Vulkan", nullptr, nullptr);
-    glfwSetWindowUserPointer(window, this);
-    glfwSetFramebufferSizeCallback(window, frame_buffer_resize_callback);
-}
-
-void WRenderer::InitVulkan()
-{
-    create_vulkan_instance();
-    setup_debug_messenger();
-    create_surface();
-    pick_physical_device();
-    create_logical_device();
-    create_swap_chain();
-    create_image_views();
-    create_graphics_pipeline();
-    create_vertex_buffer();
-    create_command_pool();
-    create_command_buffer();
-    create_sync_object();
 }
 
 void WRenderer::create_vulkan_instance()
@@ -133,8 +141,8 @@ void WRenderer::create_vulkan_instance()
         .apiVersion  = vk::ApiVersion14
     };
 
-    const auto requiredLayers = getRequiredLayers(context);
-    const auto requiredExtensions = getRequiredExtensions(context);
+    const auto requiredLayers = get_required_layers();
+    const auto requiredExtensions = get_required_extensions();
 
     const vk::InstanceCreateInfo instanceCI {
         .pApplicationInfo = &appI,
@@ -146,7 +154,7 @@ void WRenderer::create_vulkan_instance()
     instance = vk::raii::Instance(context, instanceCI);
 }
 
-std::vector<const char*> getRequiredLayers(const vk::raii::Context& context)
+std::vector<const char*> WRenderer::get_required_layers() const
 {
     std::vector<char const*> requiredLayers;
     if (enableValidationLayers)
@@ -166,7 +174,7 @@ std::vector<const char*> getRequiredLayers(const vk::raii::Context& context)
     return requiredLayers;
 }
 
-std::vector<const char*> getRequiredExtensions(const vk::raii::Context& context)
+std::vector<const char*> WRenderer::get_required_extensions() const
 {
     uint32_t glfwExtensionCount = 0;
     const auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
@@ -231,30 +239,30 @@ void WRenderer::pick_physical_device()
     const auto physicalDevices = instance.enumeratePhysicalDevices();
 
     const auto device_it = std::ranges::find_if(physicalDevices,
-        [&](const auto& physicalDevice) {
-            auto queueFamilies = physicalDevice.getQueueFamilyProperties();
-            bool isSuitable = physicalDevice.getProperties().apiVersion >= VK_API_VERSION_1_4;
+                                                [&](const auto& physicalDevice) {
+                                                    auto queueFamilies = physicalDevice.getQueueFamilyProperties();
+                                                    bool isSuitable = physicalDevice.getProperties().apiVersion >= VK_API_VERSION_1_4;
 
-            const auto queueFamilyProperty_it = std::ranges::find_if(queueFamilies,
-                [](const auto& qfp) {
-                    return (qfp.queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0);
-            });
-            isSuitable = isSuitable && (queueFamilyProperty_it != queueFamilies.end());
+                                                    const auto queueFamilyProperty_it = std::ranges::find_if(queueFamilies,
+                                                        [](const auto& qfp) {
+                                                            return (qfp.queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0);
+                                                        });
+                                                    isSuitable = isSuitable && (queueFamilyProperty_it != queueFamilies.end());
 
-            const auto extensions = physicalDevice.enumerateDeviceExtensionProperties();
-            bool found = true;
-            for (const auto& dExtension : device_extensions)
-            {
-                auto extension_it = std::ranges::find_if(extensions, [dExtension](const auto& ext){return strcmp(ext.extensionName, dExtension) == 0; });
-                found = found && (extension_it != extensions.end());
-            }
-            isSuitable = isSuitable && found;
+                                                    const auto extensions = physicalDevice.enumerateDeviceExtensionProperties();
+                                                    bool found = true;
+                                                    for (const auto& dExtension : device_extensions)
+                                                    {
+                                                        auto extension_it = std::ranges::find_if(extensions, [dExtension](const auto& ext){return strcmp(ext.extensionName, dExtension) == 0; });
+                                                        found = found && (extension_it != extensions.end());
+                                                    }
+                                                    isSuitable = isSuitable && found;
 
-            if (isSuitable)
-                physical_device = physicalDevice;
+                                                    if (isSuitable)
+                                                        physical_device = physicalDevice;
 
-            return isSuitable;
-    });
+                                                    return isSuitable;
+                                                });
 
     if (device_it == physicalDevices.end())
         throw std::runtime_error("failed to find a suitable GPU");
@@ -265,12 +273,12 @@ void WRenderer::create_logical_device()
     const auto queueFamilyProperties = physical_device.getQueueFamilyProperties();
 
     const auto graphicsQueueFamilyProperty = std::ranges::find_if(queueFamilyProperties,
-        [](const auto& qfp) {
-            return (qfp.queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0);
-        }
+                                                                  [](const auto& qfp) {
+                                                                      return (qfp.queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0);
+                                                                  }
     );
     uint32_t graphicsIndex = std::ranges::distance(queueFamilyProperties.begin(), graphicsQueueFamilyProperty);
-    const uint32_t presentationIndex = getPresentationQFPIndex(physical_device, surface, graphicsIndex);
+    const uint32_t presentationIndex = get_presentation_qfp_index(graphicsIndex);
 
     vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicStateFeatures {
         .pNext = nullptr,
@@ -321,11 +329,11 @@ void WRenderer::create_logical_device()
     present_queue = device.getQueue(presentationIndex, 0);
 }
 
-uint32_t getPresentationQFPIndex(const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::SurfaceKHR& surface, uint32_t& graphicsIndex)
+uint32_t WRenderer::get_presentation_qfp_index(uint32_t& graphicsIndex) const
 {
-    const auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
+    const auto queueFamilyProperties = physical_device.getQueueFamilyProperties();
 
-    auto presentationIndex = physicalDevice.getSurfaceSupportKHR(graphicsIndex, *surface) ? graphicsIndex : static_cast<uint32_t>( queueFamilyProperties.size() );
+    auto presentationIndex = physical_device.getSurfaceSupportKHR(graphicsIndex, *surface) ? graphicsIndex : static_cast<uint32_t>( queueFamilyProperties.size() );
     if ( presentationIndex == queueFamilyProperties.size() )
     {
         // the graphicsIndex doesn't support present -> look for another family index that supports both
@@ -333,7 +341,7 @@ uint32_t getPresentationQFPIndex(const vk::raii::PhysicalDevice& physicalDevice,
         for ( size_t i = 0; i < queueFamilyProperties.size(); i++ )
         {
             if ( ( queueFamilyProperties[i].queueFlags & vk::QueueFlagBits::eGraphics ) &&
-                 physicalDevice.getSurfaceSupportKHR( static_cast<uint32_t>( i ), *surface ) )
+                physical_device.getSurfaceSupportKHR( static_cast<uint32_t>( i ), *surface ) )
             {
                 graphicsIndex = static_cast<uint32_t>( i );
                 presentationIndex  = graphicsIndex;
@@ -346,7 +354,7 @@ uint32_t getPresentationQFPIndex(const vk::raii::PhysicalDevice& physicalDevice,
             // family index that supports present
             for ( size_t i = 0; i < queueFamilyProperties.size(); i++ )
             {
-                if ( physicalDevice.getSurfaceSupportKHR( static_cast<uint32_t>( i ), *surface ) )
+                if ( physical_device.getSurfaceSupportKHR( static_cast<uint32_t>( i ), *surface ) )
                 {
                     presentationIndex = static_cast<uint32_t>( i );
                     break;
@@ -388,46 +396,6 @@ void WRenderer::create_swap_chain()
     swap_chain_images = swap_chain.getImages();
 }
 
-vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats)
-{
-    for (const auto& availableFormat : availableFormats)
-        if (availableFormat.format == vk::Format::eB8G8R8A8Srgb && availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
-            return availableFormat;
-
-    return availableFormats.front();
-}
-
-vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities, GLFWwindow* window)
-{
-    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
-        return capabilities.currentExtent;
-
-    int width, height;
-    glfwGetFramebufferSize(window, &width, &height);
-
-    return {
-        std::clamp<uint32_t>(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
-        std::clamp<uint32_t>(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)
-    };
-}
-
-uint32_t chooseSwapMinImageCount(const vk::SurfaceCapabilitiesKHR& swapSurfaceCapabilities)
-{
-    auto minImageCount = std::max(3u, swapSurfaceCapabilities.minImageCount);
-    minImageCount = (swapSurfaceCapabilities.maxImageCount > 0 && minImageCount > swapSurfaceCapabilities.maxImageCount) ? swapSurfaceCapabilities.maxImageCount : minImageCount;
-
-    return minImageCount;
-}
-
-vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)
-{
-    for (const auto& availablePresentMode : availablePresentModes)
-        if (availablePresentMode == vk::PresentModeKHR::eMailbox)
-            return availablePresentMode;
-
-    return vk::PresentModeKHR::eFifo;
-}
-
 void WRenderer::create_image_views()
 {
     swap_chain_image_views.clear();
@@ -447,7 +415,7 @@ void WRenderer::create_image_views()
 
 void WRenderer::create_graphics_pipeline()
 {
-    const auto shaderModule = create_shader_module(device, read_shader_file("src/shaders/shader.spv"));
+    const auto shaderModule = create_shader_module(readShaderFile("src/shaders/shader.spv"));
     const vk::PipelineShaderStageCreateInfo vertexShaderCI {
         .stage = vk::ShaderStageFlagBits::eVertex,
         .module = shaderModule,
@@ -544,7 +512,7 @@ void WRenderer::create_graphics_pipeline()
     graphics_pipeline = {device, nullptr, pipelineCI};
 }
 
-vk::raii::ShaderModule create_shader_module(const vk::raii::Device& device, const std::vector<char>& code)
+vk::raii::ShaderModule WRenderer::create_shader_module(const std::vector<char>& code)
 {
     vk::ShaderModuleCreateInfo shaderModuleCI {
         .codeSize = code.size() * sizeof(char),
@@ -552,22 +520,6 @@ vk::raii::ShaderModule create_shader_module(const vk::raii::Device& device, cons
     };
 
     return {device, shaderModuleCI};
-}
-
-std::vector<char> read_shader_file(const std::string &filename)
-{
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-    if (!file.is_open()) throw std::runtime_error("failed to open file!");
-
-    std::vector<char> buffer(file.tellg());
-    file.seekg(0, std::ios::beg);
-    file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
-
-    std::cout << buffer.size() << std::endl;
-
-    file.close();
-    return buffer;
 }
 
 void WRenderer::create_vertex_buffer()
@@ -582,7 +534,7 @@ void WRenderer::create_vertex_buffer()
     const vk::MemoryRequirements memRequirements = vertex_buffer.getMemoryRequirements();
     const vk::MemoryAllocateInfo memAllocInfo {
         .allocationSize = memRequirements.size,
-        .memoryTypeIndex = findMemoryType(physical_device, memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent)
+        .memoryTypeIndex = find_memory_type(memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent)
     };
     vertex_buffer_memory = {device, memAllocInfo};
 
@@ -593,9 +545,9 @@ void WRenderer::create_vertex_buffer()
     vertex_buffer_memory.unmapMemory();
 }
 
-uint32_t findMemoryType(const vk::PhysicalDevice& physicalDevice, const uint32_t typeFilter, const vk::MemoryPropertyFlags properties)
+uint32_t WRenderer::find_memory_type(const uint32_t typeFilter, const vk::MemoryPropertyFlags properties) const
 {
-    const auto memProperties = physicalDevice.getMemoryProperties();
+    const auto memProperties = physical_device.getMemoryProperties();
     for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
         if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
             return i;
@@ -772,14 +724,6 @@ void WRenderer::transition_image_layout(const uint32_t imageIndex, const vk::Ima
     command_buffers[frame_index].pipelineBarrier2(dependencyI);
 }
 
-void WRenderer::Cleanup()
-{
-    destroy_vulkan();
-
-    glfwDestroyWindow(window);
-    glfwTerminate();
-}
-
 void WRenderer::frame_buffer_resize_callback(GLFWwindow* window, int width, int height)
 {
     const auto app = static_cast<WRenderer*>(glfwGetWindowUserPointer(window));
@@ -791,4 +735,60 @@ vk::Bool32 WRenderer::debugCallback(const vk::DebugUtilsMessageSeverityFlagBitsE
     std::cerr << to_string(severity) << " validation layer: type " << to_string(type) << " msg: " << pCallbackData->pMessage << std::endl;
 
     return vk::False;
+}
+
+vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats)
+{
+    for (const auto& availableFormat : availableFormats)
+        if (availableFormat.format == vk::Format::eB8G8R8A8Srgb && availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+            return availableFormat;
+
+    return availableFormats.front();
+}
+
+vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities, GLFWwindow* window)
+{
+    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
+        return capabilities.currentExtent;
+
+    int width, height;
+    glfwGetFramebufferSize(window, &width, &height);
+
+    return {
+        std::clamp<uint32_t>(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
+        std::clamp<uint32_t>(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)
+    };
+}
+
+uint32_t chooseSwapMinImageCount(const vk::SurfaceCapabilitiesKHR& swapSurfaceCapabilities)
+{
+    auto minImageCount = std::max(3u, swapSurfaceCapabilities.minImageCount);
+    minImageCount = (swapSurfaceCapabilities.maxImageCount > 0 && minImageCount > swapSurfaceCapabilities.maxImageCount) ? swapSurfaceCapabilities.maxImageCount : minImageCount;
+
+    return minImageCount;
+}
+
+vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)
+{
+    for (const auto& availablePresentMode : availablePresentModes)
+        if (availablePresentMode == vk::PresentModeKHR::eMailbox)
+            return availablePresentMode;
+
+    return vk::PresentModeKHR::eFifo;
+}
+
+std::vector<char> readShaderFile(const std::string &filename)
+{
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+    if (!file.is_open()) throw std::runtime_error("failed to open file!");
+
+    std::vector<char> buffer(file.tellg());
+    file.seekg(0, std::ios::beg);
+    file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+
+    std::cout << buffer.size() << std::endl;
+
+    file.close();
+    return buffer;
 }
