@@ -18,7 +18,6 @@ add_library(WyrmRenderer)
 
 add_subdirectory(include)
 add_subdirectory(src)
-add_subdirectory(src/shaders)
 
 target_link_libraries(WyrmRenderer
     Vulkan::Vulkan

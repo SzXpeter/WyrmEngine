@@ -29,3 +29,6 @@ cmake-build-*/
 # OS files
 .DS_Store
 Thumbs.db
+
+# custom files
+vk_mem_alloc.h

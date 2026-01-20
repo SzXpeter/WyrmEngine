@@ -443,7 +443,7 @@ void WRenderer::create_image_views()
 
 void WRenderer::create_graphics_pipeline()
 {
-    const auto shaderModule = create_shader_module(readShaderFile("src/shaders/shader.spv"));
+    const auto shaderModule = create_shader_module(readShaderFile("src/shader.spv"));
     const vk::PipelineShaderStageCreateInfo vertexShaderCI {
         .stage = vk::ShaderStageFlagBits::eVertex,
         .module = shaderModule,

@@ -7,7 +7,7 @@ entry_points = [
 ]
 
 arguments = [
-    "slangc", "shader.slang",
+    "slangc", "src/shaders/shader.slang",
     "-target", "spirv",
     "-profile", "spirv_1_4",
     "-emit-spirv-directly",
@@ -18,4 +18,4 @@ arguments.extend(["-o", "shader.spv"])
 
 subprocess.run(arguments, check=True)
 
-os.replace("shader.spv", "../../../cmake-build-debug/src/shaders/shader.spv")
+os.replace("shader.spv", "../cmake-build-debug/src/shader.spv")
