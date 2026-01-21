@@ -2,10 +2,10 @@
 cmake-build-*/
 
 # Default ignored files
-/shelf/
-/workspace.xml
-/usage.statistics.xml
-/editor.xml
+/.idea/shelf/
+/.idea/workspace.xml
+/.idea/usage.statistics.xml
+/.idea/editor.xml
 
 # Ignored default folder with query files
 /queries/
@@ -31,4 +31,4 @@ cmake-build-*/
 Thumbs.db
 
 # custom files
-vk_mem_alloc.h
+/WyrmRenderer/src/vk_mem_alloc.h

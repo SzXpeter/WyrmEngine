@@ -9,9 +9,13 @@
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
 #include "vk_mem_alloc.h"
 
+#include <glm/gtc/matrix_transform.hpp>
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <sstream>
+
+void create_buffer(const VmaAllocator& _allocator, vk::DeviceSize size, vk::BufferUsageFlags usage, VmaMemoryUsage memoryUsage, vk::Buffer& buffer, VmaAllocation& allocation);
 
 WRenderer& WRenderer::GetInstance()
 {
@@ -32,12 +36,8 @@ void WRenderer::SetWindowSize(const int _width, const int _height)
 
 void WRenderer::InitWindow()
 {
-#ifdef __linux__
-    glfwWindowHint(GLFW_PLATFORM, GLFW_ANY_PLATFORM);
-#endif
-
+    glfwInitHint(GLFW_PLATFORM, GLFW_ANY_PLATFORM);
     glfwInit();
-
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
     window = glfwCreateWindow(static_cast<int>(width), static_cast<int>(height), "Vulkan", nullptr, nullptr);
@@ -55,11 +55,13 @@ void WRenderer::InitVulkan()
     vma_init();
     create_swap_chain();
     create_image_views();
+    create_descriptor_set_layout();
     create_graphics_pipeline();
     create_command_pool();
-    create_command_buffer();
     create_vertex_buffer();
     create_index_buffer();
+    create_uniform_buffers();
+    create_command_buffers();
     create_sync_object();
 }
 
@@ -74,7 +76,7 @@ void WRenderer::Cleanup()
 void WRenderer::DrawFrame()
 {
     if (device.waitForFences(*in_flight_fences[frame_index], vk::True, UINT64_MAX) != vk::Result::eSuccess)
-        throw std::runtime_error("failed to wait for fence(s)!");
+        WThrowException("failed to wait for fence(s)!");
     device.resetFences(*in_flight_fences[frame_index]);
 
     auto [result, imageIndex] = swap_chain.acquireNextImage(UINT64_MAX, *present_complete_semaphores[frame_index], nullptr);
@@ -89,7 +91,7 @@ void WRenderer::DrawFrame()
         break;
 
     default:
-        throw std::runtime_error("failed to acquire swap chain image");
+        WThrowException("failed to acquire swap chain image");
     }
 
     command_buffers[frame_index].reset();
@@ -132,10 +134,17 @@ void WRenderer::DrawFrame()
         break;
 
     default:
-        throw std::runtime_error("failed to present swap chain image");
+        WThrowException("failed to present swap chain image");
     }
 
     frame_index = (frame_index + 1) % MAX_FRAMES_IN_FLIGHT;
+}
+
+void WRenderer::WThrowException(const std::string& message, const int line)
+{
+    std::stringstream m;
+    m << __LINE__ << ": " << message;
+    throw std::runtime_error(m.str());
 }
 
 void WRenderer::create_vulkan_instance()
@@ -176,7 +185,7 @@ std::vector<const char*> WRenderer::get_required_layers() const
             unsupportedLayers << " - " << requiredLayer << "\n";
 
     if (!unsupportedLayers.str().empty())
-        throw std::runtime_error("Unsupported vulkan layers:\n" + unsupportedLayers.str());
+        WThrowException("Unsupported vulkan layers:\n" + unsupportedLayers.str());
 
     return requiredLayers;
 }
@@ -203,7 +212,7 @@ std::vector<const char*> WRenderer::get_required_extensions() const
         }
     }
     if (!unsupportedExtensions.str().empty())
-        throw std::runtime_error("Unsupported GLFW extensions:\n" + unsupportedExtensions.str());
+        WThrowException("Unsupported GLFW extensions:\n" + unsupportedExtensions.str());
 
     return requiredExtensions;
 }
@@ -236,7 +245,7 @@ void WRenderer::create_surface()
 {
     VkSurfaceKHR _surface;
     if (glfwCreateWindowSurface(*instance, window, nullptr, &_surface) != 0)
-        throw std::runtime_error("Failed to create window surface");
+        WThrowException("Failed to create window surface");
 
     surface = vk::raii::SurfaceKHR(instance, _surface);
 }
@@ -272,7 +281,7 @@ void WRenderer::pick_physical_device()
                                                 });
 
     if (device_it == physicalDevices.end())
-        throw std::runtime_error("failed to find a suitable GPU");
+        WThrowException("failed to find a suitable GPU");
 }
 
 void WRenderer::create_logical_device()
@@ -375,7 +384,7 @@ uint32_t WRenderer::get_presentation_qfp_index(uint32_t& graphicsIndex) const
     }
     if ( graphicsIndex == queueFamilyProperties.size() || presentationIndex == queueFamilyProperties.size() )
     {
-        throw std::runtime_error( "Could not find a queue for graphics or present -> terminating" );
+        WThrowException( "Could not find a queue for graphics or present -> terminating" );
     }
 
     return presentationIndex;
@@ -439,6 +448,22 @@ void WRenderer::create_image_views()
         imageViewCI.image = image;
         swap_chain_image_views.emplace_back(device, imageViewCI);
     }
+}
+
+void WRenderer::create_descriptor_set_layout()
+{
+    vk::DescriptorSetLayoutBinding uboLayoutBinding {
+        .binding = 0,
+        .descriptorType = vk::DescriptorType::eUniformBuffer,
+        .descriptorCount = 1,
+        .stageFlags = vk::ShaderStageFlagBits::eVertex,
+        .pImmutableSamplers = nullptr
+    };
+    vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutCI {
+        .bindingCount = 1,
+        .pBindings = &uboLayoutBinding
+    };
+    descriptor_set_layout = {device, descriptorSetLayoutCI};
 }
 
 void WRenderer::create_graphics_pipeline()
@@ -512,8 +537,9 @@ void WRenderer::create_graphics_pipeline()
         .pAttachments = &colorBlendAttachment
     };
 
-    constexpr vk::PipelineLayoutCreateInfo pipelineLayoutCI {
-        .setLayoutCount = 0,
+    const vk::PipelineLayoutCreateInfo pipelineLayoutCI {
+        .setLayoutCount = 1,
+        .pSetLayouts = &*descriptor_set_layout,
         .pushConstantRangeCount = 0
     };
     pipeline_layout = {device, pipelineLayoutCI};
@@ -559,7 +585,7 @@ void WRenderer::create_command_pool()
     command_pool = {device, poolCI};
 }
 
-void WRenderer::create_command_buffer()
+void WRenderer::create_command_buffers()
 {
     const vk::CommandBufferAllocateInfo allocateI {
         .commandPool = command_pool,
@@ -569,7 +595,6 @@ void WRenderer::create_command_buffer()
     command_buffers = vk::raii::CommandBuffers(device, allocateI);
 }
 
-void create_buffer(const VmaAllocator& _allocator, vk::DeviceSize size, vk::BufferUsageFlags usage, VmaMemoryUsage memoryUsage, vk::Buffer& buffer, VmaAllocation& allocation);
 void WRenderer::create_vertex_buffer()
 {
     const vk::DeviceSize bufferSize {sizeof(vertices[0]) * vertices.size()};
@@ -634,6 +659,51 @@ void WRenderer::create_index_buffer()
     vmaDestroyBuffer(allocator, stagingBuffer, stagingAllocation);
 }
 
+void WRenderer::copy_buffer(const vk::Buffer& srcBuffer, const vk::Buffer& dstBuffer, const vk::DeviceSize size) const
+{
+    const vk::CommandBufferAllocateInfo allocateI {
+        .commandPool = command_pool,
+        .level = vk::CommandBufferLevel::ePrimary,
+        .commandBufferCount = 1
+    };
+    const vk::raii::CommandBuffer commandCopyBuffer = std::move(device.allocateCommandBuffers(allocateI).front());
+
+    commandCopyBuffer.begin(vk::CommandBufferBeginInfo {.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+    commandCopyBuffer.copyBuffer(srcBuffer, dstBuffer, vk::BufferCopy(0, 0, size));
+    commandCopyBuffer.end();
+
+    graphics_queue.submit(vk::SubmitInfo {.commandBufferCount = 1, .pCommandBuffers = &*commandCopyBuffer}, nullptr);
+    graphics_queue.waitIdle();
+}
+
+void WRenderer::create_uniform_buffers()
+{
+    uniform_buffers.clear();
+    uniform_buffer_allocs.clear();
+    uniform_buffers_mapped.clear();
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        constexpr vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
+        vk::Buffer buffer;
+        VmaAllocation allocation;
+        create_buffer(
+            allocator,
+            bufferSize,
+            vk::BufferUsageFlagBits::eUniformBuffer,
+            VMA_MEMORY_USAGE_GPU_TO_CPU,
+            buffer,
+            allocation
+        );
+        uniform_buffers.emplace_back(buffer);
+        uniform_buffer_allocs.emplace_back(allocation);
+
+        void* data = nullptr;
+        vmaMapMemory(allocator, uniform_buffer_allocs[i], &data);
+        uniform_buffers_mapped.emplace_back(data);
+    }
+}
+
 void create_buffer(const VmaAllocator& _allocator, const vk::DeviceSize size, const vk::BufferUsageFlags usage, const VmaMemoryUsage memoryUsage, vk::Buffer& buffer, VmaAllocation& allocation)
 {
     const vk::BufferCreateInfo bufferCI{
@@ -656,23 +726,6 @@ void create_buffer(const VmaAllocator& _allocator, const vk::DeviceSize size, co
     );
 }
 
-void WRenderer::copy_buffer(const vk::Buffer& srcBuffer, const vk::Buffer& dstBuffer, const vk::DeviceSize size) const
-{
-    const vk::CommandBufferAllocateInfo allocateI {
-        .commandPool = command_pool,
-        .level = vk::CommandBufferLevel::ePrimary,
-        .commandBufferCount = 1
-    };
-    const vk::raii::CommandBuffer commandCopyBuffer = std::move(device.allocateCommandBuffers(allocateI).front());
-
-    commandCopyBuffer.begin(vk::CommandBufferBeginInfo {.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-    commandCopyBuffer.copyBuffer(srcBuffer, dstBuffer, vk::BufferCopy(0, 0, size));
-    commandCopyBuffer.end();
-
-    graphics_queue.submit(vk::SubmitInfo {.commandBufferCount = 1, .pCommandBuffers = &*commandCopyBuffer}, nullptr);
-    graphics_queue.waitIdle();
-}
-
 void WRenderer::create_sync_object()
 {
     assert(present_complete_semaphores.empty() && render_finished_semaphores.empty() && in_flight_fences.empty());
@@ -690,36 +743,21 @@ void WRenderer::create_sync_object()
     }
 }
 
-/** This is needed for correct destruction on wayland because the ownership works differently.
-    The instance owns the window object, meaning the default destructor of WRenderer causes a segmentation error **/
-void WRenderer::destroy_vulkan()
+void WRenderer::update_uniform_buffers(const uint32_t currentImage) const
 {
-    cleanup_swap_chain();
+    static const auto startTime = std::chrono::high_resolution_clock::now();
 
-    in_flight_fences.clear();
-    render_finished_semaphores.clear();
-    present_complete_semaphores.clear();
+    const auto currentTime = std::chrono::high_resolution_clock::now();
+    const float time = std::chrono::duration<float>(currentTime - startTime).count();
 
-    command_buffers.clear();
-    command_pool.clear();
+    UniformBufferObject ubo{};
+    ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(30.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.view = glm::lookAt(glm::vec3(2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.projection = glm::perspective(glm::radians(45.0f), static_cast<float>(swap_chain_extent.width) / static_cast<float>(swap_chain_extent.height), 0.01f, 10.0f);
 
-    vmaDestroyBuffer(allocator, index_buffer, index_buffer_alloc);
-    vmaDestroyBuffer(allocator, vertex_buffer, vertex_buffer_alloc);
+    ubo.projection[1][1] *= -1;
 
-    pipeline_layout.clear();
-    graphics_pipeline.clear();
-
-    graphics_queue.clear();
-    present_queue.clear();
-
-    vmaDestroyAllocator(allocator);
-
-    device.clear();
-    physical_device.clear();
-
-    surface.clear();
-    debug_messenger.clear();
-    instance.clear();
+    memcpy(uniform_buffers_mapped[currentImage], &ubo, sizeof(ubo));
 }
 
 void WRenderer::cleanup_swap_chain()
@@ -826,6 +864,45 @@ void WRenderer::transition_image_layout(const uint32_t imageIndex, const vk::Ima
     command_buffers[frame_index].pipelineBarrier2(dependencyI);
 }
 
+/** This is needed for correct destruction on wayland because the ownership works differently.
+    The instance owns the window object, meaning the default destructor of WRenderer causes a segmentation error **/
+void WRenderer::destroy_vulkan()
+{
+    cleanup_swap_chain();
+
+    in_flight_fences.clear();
+    render_finished_semaphores.clear();
+    present_complete_semaphores.clear();
+
+    command_buffers.clear();
+    command_pool.clear();
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        vmaUnmapMemory(allocator, uniform_buffer_allocs[i]);
+        vmaDestroyBuffer(allocator, uniform_buffers[i], uniform_buffer_allocs[i]);
+    }
+
+    vmaDestroyBuffer(allocator, index_buffer, index_buffer_alloc);
+    vmaDestroyBuffer(allocator, vertex_buffer, vertex_buffer_alloc);
+
+    descriptor_set_layout.clear();
+    pipeline_layout.clear();
+    graphics_pipeline.clear();
+
+    graphics_queue.clear();
+    present_queue.clear();
+
+    vmaDestroyAllocator(allocator);
+
+    device.clear();
+    physical_device.clear();
+
+    surface.clear();
+    debug_messenger.clear();
+    instance.clear();
+}
+
 void WRenderer::frame_buffer_resize_callback(GLFWwindow* window, int width, int height)
 {
     const auto app = static_cast<WRenderer*>(glfwGetWindowUserPointer(window));
@@ -883,7 +960,7 @@ std::vector<char> readShaderFile(const std::string &filename)
 {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
-    if (!file.is_open()) throw std::runtime_error("failed to open file!");
+    if (!file.is_open()) WRenderer::WThrowException("failed to open file!");
 
     std::vector<char> buffer(file.tellg());
     file.seekg(0, std::ios::beg);

@@ -43,6 +43,8 @@ public:
 
     void DrawFrame();
 
+    static void WThrowException(const std::string& message, int line = __LINE__);
+
 private:
     WRenderer() = default;
 
@@ -70,6 +72,7 @@ private:
     vk::Extent2D swap_chain_extent;
     std::vector<vk::raii::ImageView> swap_chain_image_views;
 
+    vk::raii::DescriptorSetLayout descriptor_set_layout = nullptr;
     vk::raii::PipelineLayout pipeline_layout = nullptr;
     vk::raii::Pipeline graphics_pipeline = nullptr;
 
@@ -77,6 +80,10 @@ private:
     VmaAllocation vertex_buffer_alloc = nullptr;
     vk::Buffer index_buffer = nullptr;
     VmaAllocation index_buffer_alloc = nullptr;
+
+    std::vector<vk::Buffer> uniform_buffers;
+    std::vector<VmaAllocation> uniform_buffer_allocs;
+    std::vector<void*> uniform_buffers_mapped;
 
     vk::raii::CommandPool command_pool = nullptr;
     std::vector<vk::raii::CommandBuffer> command_buffers;
@@ -103,25 +110,29 @@ private:
     void create_swap_chain();
     void create_image_views();
 
+    void create_descriptor_set_layout();
     void create_graphics_pipeline();
     [[nodiscard]] vk::raii::ShaderModule create_shader_module(const std::vector<char>& code);
 
     void create_command_pool();
-    void create_command_buffer();
+    void create_command_buffers();
 
     void create_vertex_buffer();
     void create_index_buffer();
     void copy_buffer(const vk::Buffer& srcBuffer, const vk::Buffer& dstBuffer, vk::DeviceSize size) const;
+    void create_uniform_buffers();
 
     void create_sync_object();
 
-    void destroy_vulkan();
+    void update_uniform_buffers(uint32_t currentImage) const;
 
     void cleanup_swap_chain();
     void recreate_swap_chain();
 
     void record_command_buffer(uint32_t imageIndex) const;
     void transition_image_layout(uint32_t imageIndex, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, vk::AccessFlags2 srcAccessMask, vk::AccessFlags2 dstAccessMask, vk::PipelineStageFlags2 srcStageMask, vk::PipelineStageFlags2 dstStageMask) const;
+
+    void destroy_vulkan();
 
     std::vector<const char*> device_extensions = {
         vk::KHRSwapchainExtensionName
@@ -150,6 +161,13 @@ struct Vertex
             vk::VertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color))
         };
     }
+};
+
+struct UniformBufferObject
+{
+    glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 projection;
 };
 
 vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
