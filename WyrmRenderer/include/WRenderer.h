@@ -85,6 +85,9 @@ private:
     std::vector<VmaAllocation> uniform_buffer_allocs;
     std::vector<void*> uniform_buffers_mapped;
 
+    vk::raii::DescriptorPool descriptor_pool = nullptr;
+    std::vector<vk::raii::DescriptorSet> descriptor_sets;
+
     vk::raii::CommandPool command_pool = nullptr;
     std::vector<vk::raii::CommandBuffer> command_buffers;
 
@@ -121,6 +124,9 @@ private:
     void create_index_buffer();
     void copy_buffer(const vk::Buffer& srcBuffer, const vk::Buffer& dstBuffer, vk::DeviceSize size) const;
     void create_uniform_buffers();
+
+    void create_descriptor_pool();
+    void create_descriptor_sets();
 
     void create_sync_object();
 

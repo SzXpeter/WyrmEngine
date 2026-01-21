@@ -61,6 +61,8 @@ void WRenderer::InitVulkan()
     create_vertex_buffer();
     create_index_buffer();
     create_uniform_buffers();
+    create_descriptor_pool();
+    create_descriptor_sets();
     create_command_buffers();
     create_sync_object();
 }
@@ -701,6 +703,44 @@ void WRenderer::create_uniform_buffers()
         void* data = nullptr;
         vmaMapMemory(allocator, uniform_buffer_allocs[i], &data);
         uniform_buffers_mapped.emplace_back(data);
+    }
+}
+
+void WRenderer::create_descriptor_pool()
+{
+    constexpr vk::DescriptorPoolSize descriptorPoolSize {
+        .type = vk::DescriptorType::eUniformBuffer,
+        .descriptorCount = MAX_FRAMES_IN_FLIGHT
+    };
+    // ReSharper disable once CppVariableCanBeMadeConstexpr
+    const vk::DescriptorPoolCreateInfo descriptorPoolCI {
+        .maxSets = MAX_FRAMES_IN_FLIGHT,
+        .poolSizeCount = 1,
+        .pPoolSizes = &descriptorPoolSize
+    };
+    descriptor_pool = {device, descriptorPoolCI};
+}
+
+void WRenderer::create_descriptor_sets()
+{
+    // TODO: implement descriptor sets, and check if there is vma implementation
+    std::vector layouts(MAX_FRAMES_IN_FLIGHT, *descriptor_set_layout);
+    const vk::DescriptorSetAllocateInfo descriptorSetAllocI {
+        .descriptorPool = descriptor_pool,
+        .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
+        .pSetLayouts = layouts.data(),
+    };
+
+    descriptor_sets.clear();
+    descriptor_sets = device.allocateDescriptorSets(descriptorSetAllocI);
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        vk::DescriptorBufferInfo bufferInfo {
+            .buffer = uniform_buffers[i],
+            .offset = 0,
+            .range = sizeof(UniformBufferObject),
+        };
     }
 }
 
